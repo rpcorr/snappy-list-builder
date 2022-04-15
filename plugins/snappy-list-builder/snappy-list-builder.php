@@ -133,7 +133,9 @@ add_action( 'add_meta_boxes_slb_subscriber', 'slb_add_subscriber_metaboxes');
 
 function slb_subscriber_metabox() {
     
-    ?>
+    wp_nonce_field( basename( __FILE__ ), 'slb_subscriber_nonce');
+        
+?>
 
 <style>
 .slb-field-row {
@@ -194,13 +196,52 @@ function slb_subscriber_metabox() {
     <div class="slb-field-container">
         <label>Lists</label><br />
         <ul>
-            <li><label><input type="checkbox" name="slb_list[]" value="1" />List 1</label></li>
-            <li><label><input type="checkbox" name="slb_list[]" value="2" />List 2</label></li>
-            <li><label><input type="checkbox" name="slb_list[]" value="3" />List 3</label></li>
+
+            <?php
+                global $wpdb; // pull in the WordPress database object
+                
+                $list_query = $wpdb->get_results("SELECT ID, post_title FROM {$wpdb->posts} WHERE post_type='slb_list' AND post_status IN ('draft', 'publish')");
+
+                if( !is_null( $list_query )) {
+                    
+                    foreach( $list_query as $list ) {
+                        echo '<li><label><input type="checkbox" name="slb_list[]" value="'. $list->ID .'" />'. $list->post_title .'</label></li>';
+                    }
+                }
+            ?>
         </ul>
     </div>
 
 </div>
 </div>
 <?php
+}
+
+function slb_save_slb_subscriber_meta( $post_id, $post) {
+    
+    // Verify nonce
+    if( !isset($_POST['slb_subscriber_nonce']) || !wp_verify_nonce( $_POST['slb_subscriber_nonce'], basename( __FILE__ ) ) ) {
+        return $post_id;
+    }
+
+    // Get the post type object
+    $post_type = get_post_type_object( $post->post_type );
+
+    // Check if the current user as permission to edit the post
+    if ( !current_user_can( $post_type->cap->edit_post, $post_id)) {
+        return $post_id;
+    }
+
+    // Get the posted data and sanitize it
+    $first_name = ( isset($_POST['slb_first_name'])) ? sanitize_text_field( $_POST['slb_first_name'] )  : '';
+    $last_name = ( isset($_POST['slb_last_name'])) ? sanitize_text_field( $_POST['slb_last_name'] )  : '';
+    $email = ( isset($_POST['slb_email'])) ? sanitize_text_field( $_POST['slb_email'] )  : '';
+    $lists = ( isset($_POST['slb_list']) && is_array($_POST['slb_list'])) ? (array)$_POST['slb_list'] : [];
+
+    echo '<br/>'. $first_name;
+    echo '<br/>'. $last_name;
+    echo '<br/>'. $email;
+    echo '<br/>'. $lists;
+    exit;
+    
 }
