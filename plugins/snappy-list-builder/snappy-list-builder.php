@@ -36,6 +36,8 @@ Text Domain: snappy-list-builder
 
     9. SETTINGS
 
+    10. MISC.
+
 */
 
 /* !1. HOOKS */
@@ -109,4 +111,96 @@ function slb_form_shortcode( $args, $content="") {
 /* !8. ADMIN PAGES */
 
 
+
 /* !9. SETTINGS */
+
+
+
+/* !10. MISC */
+function slb_add_subscriber_metaboxes( $post ) {
+    
+    add_meta_box(
+        'slb-subscriber-details', // ID
+        'Subscriber Details', // Title
+        'slb_subscriber_metabox', // a Function
+        'slb_subscriber', // Post type
+        'normal', // Priority
+        'default' // Styling
+    );
+}
+
+add_action( 'add_meta_boxes_slb_subscriber', 'slb_add_subscriber_metaboxes');
+
+function slb_subscriber_metabox() {
+    
+    ?>
+
+<style>
+.slb-field-row {
+    display: flex;
+    flex-flow: row nowrap;
+    flex: 1 1;
+}
+
+.slb-field-container {
+    position: relative;
+    flex: 1 1;
+    margin-right: 1em;
+}
+
+.slb-field-container label {
+    font-weight: bold;
+}
+
+.slb-field-container label span {
+    color: red;
+}
+
+.slb-field-container ul {
+    list-style: none;
+    margin-top: 0;
+}
+
+.slb-field-container ul {
+    font-weight: normal;
+}
+</style>
+<div class="slb-field-row">
+    <div class="slb-field-container">
+        <p>
+            <label for="fName">First Name <span>*</span></label><br />
+            <input type="text" name="slb_first_name" id="fName" required="required" class="widefat">
+        </p>
+    </div>
+
+    <div class=" slb-field-container">
+        <p>
+            <label for="lName">Last Name <span>*</span></label><br />
+            <input type="text" name="slb_last_name" id="lName" required="required" class="widefat">
+        </p>
+    </div>
+</div>
+
+<div class=" slb-field-row">
+    <div class="slb-field-container">
+        <p>
+            <label for="email">Email Address <span>*</span></label><br />
+            <input type="email" name="slb_email" id="email" required="required" class="widefat">
+        </p>
+    </div>
+</div>
+
+<div class="slb-field-row">
+    <div class="slb-field-container">
+        <label>Lists</label><br />
+        <ul>
+            <li><label><input type="checkbox" name="slb_list[]" value="1" />List 1</label></li>
+            <li><label><input type="checkbox" name="slb_list[]" value="2" />List 2</label></li>
+            <li><label><input type="checkbox" name="slb_list[]" value="3" />List 3</label></li>
+        </ul>
+    </div>
+
+</div>
+</div>
+<?php
+}
