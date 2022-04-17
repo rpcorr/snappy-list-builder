@@ -347,6 +347,58 @@ function slb_save_subscriber( $subscriber_data ) {
     return $subscriber_id;
 }
 
+// 5.3
+// hint: adds list to subscribers subscriptions
+function slb_add_subscription( $subscriber_id, $list_id ) {
+    
+    // setup default return value
+    $subscription_saved = false;
+
+    // if the subscriber does NOT have the current list subscription
+    if( !slb_subscriber_has_subscription( $subscriber_id, $list_id ) ) :
+
+        // get subscriptions and append new $list_id
+        $subscriptions = slb_get_subscriptions( $subscriber_id );
+        $subscriptions[] = $list_id; 
+        
+        //array_push( $subscriptions, $list_id ); does the same as $subscriptions[] = $list_id;
+
+        // update slb_subscriptions
+        update_field( slb_get_acf_key( 'slb_subscriptions' ), $subscriptions, $subscriber_id );
+
+        // subscriptions updated!
+        $subscription_saved = true;
+        
+    endif;
+
+    // return result
+    return $subscription_saved;
+}
+
+// 5.4
+// hint: gets the unique act field key from the field name 
+function slb_get_acf_key( $field_name ) {
+    
+    $field_key = field_name;
+
+    switch( $field_name ) {
+
+        case 'slb_fname' :
+            $field_key = "field_625986f2d899d";
+            break;
+        case 'slb_lname' :
+            $field_key = "field_6259873cd899e";
+            break;
+        case 'slb_email' :
+            $field_key = "field_625987ab273b4";
+            break;
+        case 'slb_subscriptions' :
+            $field_key = "field_62598806273b5";
+            break;
+    }
+    
+    return $field_key;
+}
 
 
 /* !6. HELPERS */
@@ -424,6 +476,49 @@ function slb_get_subscriber_id( $email ){
     wp_reset_query();
 
     return (int)$subscriber_id;
+}
+
+// 6.3
+// hint: returns an array of list_id's
+function slb_get_subscriptions( $subscriber_id ) {
+    
+    $subscriptions = array();
+
+    // get subscriptions (returns array of list objects)
+    $lists = get_field( slb_get_acf_key( 'slb_subscriptions' ), $subscriber_id );
+    
+    // if $lists returns something
+    if ( $lists ) :
+        
+        // if $lists is an array and there is one or more items
+        if( is_array( $lists ) && count( $lists) ) :
+            
+            // build subscriptions: array of list id's
+            foreach( $lists as $list ) :
+                $subscriptions[] = (int)$list->ID;
+            endforeach;
+        elseif( is_numeric( $lists ) ) :
+            
+            // single result returned
+            $subscriptions[] = $lists;
+        endif;
+        
+    endif;
+
+    return (array)$subscriptions;
+}
+
+// 6.4
+function slb_return_json( $php_array ) { 
+    
+    // encode result as json string
+    $json_result = json_encode( $php_array );
+ 
+    // return result
+    die( $json_result );
+
+    // stop all other processing
+    exit;    
 }
 
 
