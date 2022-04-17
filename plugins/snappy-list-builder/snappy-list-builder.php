@@ -78,13 +78,20 @@ function slb_register_shortcodes() {
 // 2.2
 // hint: returns a html string for an email capture form
 function slb_form_shortcode( $args, $content="") {
+
+    // get the list id
+    $list_id = 0;
+    if( isset($args['id']) ) $list_id = (int)$args['id'];
     
     // setup our output variable - the form html
     $output = '
     
         <div class="slb">
         
-            <form id="slb_form" name="slb_form" class="slb-form" method="post">
+            <form id="slb_form" name="slb_form" class="slb-form"
+            action="/wp-admin/admin-ajax.php?action=slb_save_subscription" method="post"> 
+
+                <input type="hidden" name="slb_list" value="' . $list_id .'">
             
                 <p class="slb-input-container">
                     <label>Your Name</label><br/>
@@ -232,6 +239,69 @@ function slb_list_column_data ( $column, $post_id ) {
 
 
 /* !5. ACTIONS */
+
+// 5.1 
+// hint: saves subscription data to an existing or new subscriber
+function slb_save_subscription() {
+    
+    // setup default result data
+    $result = array(
+        'status' => 0,
+        'message' => 'Subscription was not saved',
+    );
+
+    try {
+        
+        // get list_id
+        $list_id = (int)$_POST['slb_list'];
+        
+        // prepare subscriber data
+        $subscriber_data = array(
+          'fname' => esc_attr( $_POST['slb_fname'] ),
+          'lname' => esc_attr( $_POST['slb_lname'] ),
+          'email' => esc_attr( $_POST['slb_email'] ),
+        );
+
+        // attempt to create/save subscriber
+        $subscriber_id = slb_save_subscriber( $subscriber_data );
+
+        // if subscriber was saved successfully $subscriber_id will be greater than 0
+        if ( $subscriber_id ) :
+            
+            // if subscriber already has this subscription
+            if( slb_subscriber_has_subscription( $subscriber_id, $list_id ) ) :
+                
+                // get the list object
+                $list = get_post( $list_id );
+
+                // return detailed error
+                $result['message'] .= esc_attr( $subscriber_data['email'] . ' is already subscribed to ' . $list->post_title . '.');
+
+            else :
+                
+                // save new subscription
+                $subscription_saved = slb_add_subscription( $subscriber_id, $list_id );
+                
+                // if subscription was saved successfully
+                if( $subscription_saved ):
+                    
+                    // subscription saved!
+                    $result[ 'status' ] = 1;
+                    $result[ 'message' ] = 'Subscription saved';
+                    
+                endif;
+                
+            endif;
+            
+        endif;
+        
+    } catch ( Exception $e ) {
+    
+    }
+
+    // return result as json
+    slb_return_json( $result );
+}
 
 
 /* !6. HELPERS */
