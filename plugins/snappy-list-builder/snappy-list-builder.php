@@ -303,8 +303,128 @@ function slb_save_subscription() {
     slb_return_json( $result );
 }
 
+// 5.2
+// hint: creates a new subscriber or updates an existing one
+function slb_save_subscriber( $subscriber_data ) {
+
+    // setup default subscriber id
+    // 0 means the subscriber was not saved
+    $subscriber_id = 0;
+
+    try{
+        
+        $subscriber_id = slb_get_subscriber_id( $subscriber_data['email'] );
+
+        //if the subscriber does not already exist...
+        if( !$subscriber_id ) :
+            
+            // add new subscriber to database
+            $subscriber_id = wp_insert_post(
+                array(
+                    'post_type' => 'slb_subscriber',
+                    'post_title' => $subscriber_data[ 'fname' ] . ' ' . $subscriber_data[ 'lname' ],
+                    'post_status' => 'publish', 
+                ),
+                true
+            );
+            
+        endif;
+
+        // add/update custom meta data
+        update_field(slb_get_acf_key('slb_fname'), $subscriber_data['fname'], $subscriber_id);
+        update_field(slb_get_acf_key('slb_lname'), $subscriber_data['lname'], $subscriber_id);
+        update_field(slb_get_acf_key('slb_email'), $subscriber_data['email'], $subscriber_id);
+        
+    } catch ( Exeception $e ) {
+        
+        // a PHP error has occurred
+    }
+
+    // reset the WordPress post object
+    wp_reset_query();
+
+    // return subscriber_id
+    return $subscriber_id;
+}
+
+
 
 /* !6. HELPERS */
+
+// 6.1
+// hint: returns true or false
+function slb_subscriber_has_subscription( $subscriber_id, $list_id ) {
+    
+    // setup default return value
+    $has_subscription = false;
+
+    // get subscriber
+    $subscriber = get_post( $subscriber_id );
+
+    // get subscriptions
+    $subscriptions = slb_get_subscriptions( $subscriber_id );
+
+    // check subscriptions for $list_id
+    if ( in_array( $list_id, $subscriptions) ) :
+        
+        // found the $list_id in $subscriptions
+        // this subscriber is already subscribed to this list
+        $has_subscription = true;
+
+    else :
+        
+        // did not find $list_id in $subscriptions
+        // this subscriber is not yet subscribed to this list
+        
+    endif;
+
+    // return the result
+    return $has_subscription;
+}
+
+// 6.2
+// hint: retrieves a subscriber_id from an email address
+function slb_get_subscriber_id( $email ){
+    
+    $subscriber_id = 0;
+
+    try {
+        
+        // check if subscriber already exists
+        $subscriber_query = new WP_Query( 
+           array(
+               'post_type' => 'slb_subscriber',
+               'posts_per_page' => 1,
+               'meta_key' => 'slb_email',
+               'meta_query' => array(
+                   array(
+                    'key' => 'slb_email',
+                    'value' => $email, // or whatever it is you are using here
+                    'compare' => '=',       
+                   ),
+                ),
+           )  
+        );
+
+        // if the subscriber exists...
+        if( $subscriber_query->have_posts() ) :
+                
+            // get the subscriber id
+            $subscriber_query->the_post();
+            $subscriber_id = get_the_ID();
+            
+        endif;
+        
+    } catch( Exception $e) {
+        
+        // a PHP error occured
+    }
+
+    // reset the WordPress post object
+    wp_reset_query();
+
+    return (int)$subscriber_id;
+}
 
 
 /* !7. CUSTOM POST TYPES */
