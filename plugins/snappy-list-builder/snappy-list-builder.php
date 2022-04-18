@@ -51,10 +51,8 @@ Text Domain: snappy-list-builder
         6.5 - slb_get_acf_key( $field_name ) gets the unique act field key from the field name
         6.6 - slb_get_subscriber_data( $subscriber_id ) returns an array of subscriber data including subscriptions
 
-
-        
-
     7. CUSTOM POST TYPES
+        7.1 - subscribers
 
     8. ADMINN PAGES
 
@@ -92,7 +90,21 @@ add_action('wp_ajax_slb_save_subscription', 'slb_save_subscription'); // admin u
 // hint: load external files to public website
 add_action('wp_enqueue_scripts', 'slb_public_scripts');
 
+// 1.6
+// hint: Advance Custom Field settings (for version 5.8.9 or higher)
+define('SLB_ACF_PATH', plugin_dir_path( __FILE__ ) . '/lib/advanced-custom-fields/');
+define('SLB_ACF_URL', plugin_dir_url( __FILE__) . '/lib/advanced-custom-fields/');
+$slb_show_acf_admin = false;
 
+if ( class_exists('ACF') ) :
+    $slb_show_acf_admin = true;
+endif;
+
+include_once( SLB_ACF_PATH . 'acf.php');
+add_filter( 'acf/settings/url', 'slb_acf_settings_url');
+add_filter( 'acf/settings/show_admin', 'slb_acf_show_admin');
+add_action('views_edit-slb_subscriber', 'slb_older_acf_warning');
+add_action('views_edit-slb_list', 'slb_older_acf_warning');
 
 /* !2. SHORTCODES */
 
@@ -643,6 +655,10 @@ function slb_get_subscriber_data( $subscriber_id ) {
 
 /* !7. CUSTOM POST TYPES */
 
+// 7.1 
+// subscribers
+include_once( plugin_dir_path( __FILE__ ) . 'cpt/slb_subscriber.php');
+
 
 /* !8. ADMIN PAGES */
 
@@ -853,4 +869,31 @@ function slb_subscriber_title( $title, $post_id) {
     $new_title = get_post_meta( $post_id, 'slb_first_name', true) .' '. get_post_meta( $post_id, 'slb_last_name', true);
 
     return $new_title;
+}
+
+
+function slb_acf_settings_url( $url ) {
+    return SLB_ACF_URL;
+}
+
+function slb_acf_show_admin( $show_admin ) {
+
+    global $slb_show_acf_admin;
+    return $slb_show_acf_admin;
+}
+
+function slb_older_acf_warning( $views ) {
+    
+    global $acf;
+      
+    $acf_ver = (float) $acf->settings[ 'version' ];
+    $acf_ver_req = 5.12;
+
+    if ( $acf_ver < $acf_ver_req ) {
+        echo '<p style="color:red;">
+            <strong>You\'re using an older version of the Advanced Custom Fields plugin (version: '. $acf_ver . ').<br/>
+            Some features of Snappy List Builder may not work unless you update to version ' . $acf_ver_req  . ' or deactivate this plugin.</strong>
+        </p>';
+    }
+    return $views;
 }
