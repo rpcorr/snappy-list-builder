@@ -19,25 +19,38 @@ Text Domain: snappy-list-builder
         1.1 - registers all our custom shortcodes
         1.2 - register custom admin column headers
         1.3 - register custom admin column data
+        1.4 - register ajax actions
         
-
     2. SHORTCODES
-        2.1 - registers all our custom shortcodes slb_register_shortcodes()
-        2.2 - returns a html string for an email capture form slb_form_shortcode()
+        2.1 - slb_register_shortcodes() registers all our custom shortcodes 
+        2.2 - slb_form_shortcode( $args, $content="" ) returns a html string for an email capture form
 
     3. FILTERS
-        3.1 - slb_subscriber_column_headers()
-        3.2 - slb_subscriber_column_data()
-        3.2.2 - slb_register_custom_admin_titles()
-        3.2.3 - slb_custom_admin_titles()
-        3.3 - slb_list_column_headers()
-        3.4 - slb_list_column_data()    
+        3.1 - slb_subscriber_column_headers ( $columns ) provide custom heading labels for subscriber custom post
+        3.2 - slb_subscriber_column_data ( $column, $post_id ) show custom data in admin page of the subscriber custom post
+        3.2.2 - slb_register_custom_admin_titles() registers special custom admin title columns
+        3.2.3 - slb_custom_admin_titles( $title, $post_id ) handles custom admin title "title" column data for post types without titles; display person name under Subscriber Name
+        3.3 - slb_list_column_headers ( $columns ) provide custom heading labels for list custom post 
+        3.4 - slb_list_column_data()  show custom data in admin lists page of the custom post  
          
     4. EXTERNAL SCRIPTS
 
     5. ACTIONS
+        5.1 - slb_save_subscription() saves subscription data to an existing or new subscriber
+        5.2 - slb_save_subscriber( $subscriber_data ) creates a new subscriber or updates an existing one
+        5.3 - slb_add_subscription( $subscriber_id, $list_id ) adds list to subscribers subscriptions 
 
+        
     6. HELPERS
+        6.1 - slb_subscriber_has_subscription( $subscriber_id, $list_id ) returns true or false
+        6.2 - slb_get_subscriber_id( $email ) retrieves a subscriber_id from an email address
+        6.3 - slb_get_subscriptions( $subscriber_id ) returns an array of list_id's
+        6.4 - slb_return_json( $php_array ) transform result to json string
+        6.5 - slb_get_acf_key( $field_name ) gets the unique act field key from the field name
+        6.6 - slb_get_subscriber_data( $subscriber_id ) returns an array of subscriber data including subscriptions
+
+
+        
 
     7. CUSTOM POST TYPES
 
@@ -46,6 +59,8 @@ Text Domain: snappy-list-builder
     9. SETTINGS
 
     10. MISC.
+        10.1 - slb_add_subscriber_metaboxes( $post ) add subscriber metaboxes to the admin page
+        10.2 - slb_subscriber_metabox() fill in data for the subscriber
 
 */
 
@@ -65,6 +80,12 @@ add_filter( 'manage_edit-slb_list_columns', 'slb_list_column_headers' );
 add_filter( 'manage_slb_subscriber_posts_custom_column', 'slb_subscriber_column_data', 1, 2 );
 add_action( 'admin_head-edit.php', 'slb_register_custom_admin_titles');
 add_filter( 'manage_slb_list_posts_custom_column', 'slb_list_column_data', 1, 2);
+
+// 1.4
+// hint: register ajax actions
+add_action('wp_ajax_nopriv_slb_save_subscription', 'slb_save_subscription'); // regular website vistor
+add_action('wp_ajax_slb_save_subscription', 'slb_save_subscription'); // admin user
+
 
 
 /* !2. SHORTCODES */
@@ -125,7 +146,8 @@ function slb_form_shortcode( $args, $content="") {
 
 /* !3. FILTERS */
 
-// 3.1 
+// 3.1
+// hint: provide custom heading labels for subscriber custom post
 function slb_subscriber_column_headers ( $columns ) {
     
     // creating custom column header data
@@ -140,6 +162,7 @@ function slb_subscriber_column_headers ( $columns ) {
 }
 
 // 3.2
+// hint: show custom data in admin page of the subscriber custom post
 function slb_subscriber_column_data ( $column, $post_id ) {
     
     // setup our return text
@@ -176,7 +199,7 @@ function slb_register_custom_admin_titles() {
 }
 
 // 3.2.3
-// hint: handles custom admin title "title" column data for post types without titles
+// hint: handles custom admin title "title" column data for post types without titles; display person name under Subscriber Name
 function slb_custom_admin_titles( $title, $post_id ) {
     
     global $post;
@@ -198,12 +221,14 @@ function slb_custom_admin_titles( $title, $post_id ) {
 }
 
 // 3.3 
+// hint: provide custom heading labels for list custom post
 function slb_list_column_headers ( $columns ) {
     
     // creating custom column header data
     $columns = array (
         'cb' => '<input type="checkbox" />',
         'title' => __('List Name'),
+        'shortcode' => __('Shortcode'),
     );
 
     // returning new columns names
@@ -212,6 +237,7 @@ function slb_list_column_headers ( $columns ) {
 
 
 // 3.4
+// hint: show custom data in admin lists page of the custom post
 function slb_list_column_data ( $column, $post_id ) {
     
     // setup our return text
@@ -219,13 +245,8 @@ function slb_list_column_data ( $column, $post_id ) {
     
     switch ( $column )  {
         
-        case 'example' :
-            /*
-            // get the custom name data
-            $fname = get_field( 'slb_fname', $post_id );
-            $lname = get_field( 'slb_lname', $post_id );
-            $output .= $fname . ' ' . $lname;
-            */
+        case 'shortcode' :
+            $output .= '[slb_form id="' . $post_id . '"]';
             break;
     }
 
@@ -247,7 +268,7 @@ function slb_save_subscription() {
     // setup default result data
     $result = array(
         'status' => 0,
-        'message' => 'Subscription was not saved',
+        'message' => 'Subscription was not saved.',
     );
 
     try {
@@ -375,32 +396,6 @@ function slb_add_subscription( $subscriber_id, $list_id ) {
     return $subscription_saved;
 }
 
-// 5.4
-// hint: gets the unique act field key from the field name 
-function slb_get_acf_key( $field_name ) {
-    
-    $field_key = field_name;
-
-    switch( $field_name ) {
-
-        case 'slb_fname' :
-            $field_key = "field_625986f2d899d";
-            break;
-        case 'slb_lname' :
-            $field_key = "field_6259873cd899e";
-            break;
-        case 'slb_email' :
-            $field_key = "field_625987ab273b4";
-            break;
-        case 'slb_subscriptions' :
-            $field_key = "field_62598806273b5";
-            break;
-    }
-    
-    return $field_key;
-}
-
-
 /* !6. HELPERS */
 
 // 6.1
@@ -509,6 +504,7 @@ function slb_get_subscriptions( $subscriber_id ) {
 }
 
 // 6.4
+// hint: transform result to json string
 function slb_return_json( $php_array ) { 
     
     // encode result as json string
@@ -519,6 +515,62 @@ function slb_return_json( $php_array ) {
 
     // stop all other processing
     exit;    
+}
+
+// 6.5
+// hint: gets the unique act field key from the field name 
+function slb_get_acf_key( $field_name ) {
+    
+ $field_key = field_name;
+
+    switch( $field_name ) {
+
+        case 'slb_fname' :
+            $field_key = "field_625986f2d899d";
+            break;
+        case 'slb_lname' :
+            $field_key = "field_6259873cd899e";
+            break;
+        case 'slb_email' :
+            $field_key = "field_625987ab273b4";
+            break;
+        case 'slb_subscriptions' :
+            $field_key = "field_62598806273b5";
+            break;
+    }
+    
+    return $field_key;
+}
+
+// 6.6
+// hint: returns an array of subscriber data including subscriptions
+function slb_get_subscriber_data( $subscriber_id ) {
+    
+    // setup subscriber_data
+    $subscriber_data = array();
+
+    // get subscriber object
+    $subscriber = get_post( $subscriber_id );
+
+    // if subscriber object is valid
+    if ( isset( $subscriber->post_type ) && $subscriber->post_type == 'slb_subscriber' ) :
+
+        $fname = get_field( slb_get_acf_key( 'slb_fname'), $subscriber_id);
+        $lname = get_field( slb_get_acf_key( 'slb_lname'), $subscriber_id);
+    
+        // build subscriber data for return
+        $subscriber_data = array(
+            'name' => $fname . ' ' . $lname,
+            'fname' => $fname,
+            'lname' => $lname,
+            'email' => get_field( slb_get_acf_key( 'slb_email' ), $subscriber_id),
+            'subscriptions' => slb_get_subscriptions( $subscriber_id )
+        );
+        
+    endif;
+
+    // return subscriber_data
+    return $subscriber_data;
 }
 
 
@@ -534,6 +586,9 @@ function slb_return_json( $php_array ) {
 
 
 /* !10. MISC */
+
+// 10.1
+// hint: add subscriber metaboxes to the admin page
 function slb_add_subscriber_metaboxes( $post ) {
     
     add_meta_box(
@@ -548,6 +603,8 @@ function slb_add_subscriber_metaboxes( $post ) {
 
 //add_action( 'add_meta_boxes_slb_subscriber', 'slb_add_subscriber_metaboxes');
 
+// 10.2
+// hint: fill in data for the subscriber
 function slb_subscriber_metabox() {
 
     global $post;
