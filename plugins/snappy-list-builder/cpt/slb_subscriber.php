@@ -1,5 +1,48 @@
 <?php
 
+// create custom Subscribers post type
+function slb_register_slb_subscriber() {
+
+	/**
+	 * Post Type: Subscribers.
+	 */
+
+	$labels = [
+		"name" => __( "Subscribers" ),
+		"singular_name" => __( "Subscriber" ),
+	];
+
+	$args = [
+		"label" => __( "Subscribers" ),
+		"labels" => $labels,
+		"description" => "",
+		"public" => false,
+		"publicly_queryable" => true,
+		"show_ui" => true,
+		"show_in_rest" => true,
+		"rest_base" => "",
+		"rest_controller_class" => "WP_REST_Posts_Controller",
+		"has_archive" => false,
+		"show_in_menu" => true,
+		"show_in_nav_menus" => true,
+		"delete_with_user" => false,
+		"exclude_from_search" => true,
+		"capability_type" => "post",
+		"map_meta_cap" => true,
+		"hierarchical" => false,
+		"can_export" => false,
+		"rewrite" => [ "slug" => "slb_subscriber", "with_front" => true ],
+		"query_var" => true,
+		"supports" => false,
+		"show_in_graphql" => false,
+	];
+
+	register_post_type( "slb_subscriber", $args );
+}
+
+add_action( 'init', 'slb_register_slb_subscriber' );
+
+// create custom fields (First name, Last Name, Email, Subscriptions)
 if( function_exists('acf_add_local_field_group') ):
 
     acf_add_local_field_group(array(

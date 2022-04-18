@@ -53,6 +53,7 @@ Text Domain: snappy-list-builder
 
     7. CUSTOM POST TYPES
         7.1 - subscribers
+        7.2 - lists
 
     8. ADMINN PAGES
 
@@ -658,6 +659,10 @@ function slb_get_subscriber_data( $subscriber_id ) {
 // 7.1 
 // subscribers
 include_once( plugin_dir_path( __FILE__ ) . 'cpt/slb_subscriber.php');
+
+// 7.2 
+// lists
+include_once( plugin_dir_path( __FILE__ ) . 'cpt/slb_list.php');
 
 
 /* !8. ADMIN PAGES */
