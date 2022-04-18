@@ -20,6 +20,7 @@ Text Domain: snappy-list-builder
         1.2 - register custom admin column headers
         1.3 - register custom admin column data
         1.4 - register ajax actions
+        1.5 - load external files to public website
         
     2. SHORTCODES
         2.1 - slb_register_shortcodes() registers all our custom shortcodes 
@@ -34,6 +35,7 @@ Text Domain: snappy-list-builder
         3.4 - slb_list_column_data()  show custom data in admin lists page of the custom post  
          
     4. EXTERNAL SCRIPTS
+        4.1 - slb_public_scripts() loads external files into PUBLIC website 
 
     5. ACTIONS
         5.1 - slb_save_subscription() saves subscription data to an existing or new subscriber
@@ -85,6 +87,10 @@ add_filter( 'manage_slb_list_posts_custom_column', 'slb_list_column_data', 1, 2)
 // hint: register ajax actions
 add_action('wp_ajax_nopriv_slb_save_subscription', 'slb_save_subscription'); // regular website vistor
 add_action('wp_ajax_slb_save_subscription', 'slb_save_subscription'); // admin user
+
+// 1.5
+// hint: load external files to public website
+add_action('wp_enqueue_scripts', 'slb_public_scripts');
 
 
 
@@ -258,6 +264,27 @@ function slb_list_column_data ( $column, $post_id ) {
 
 /* !4. EXTERNAL SCRIPTS */
 
+// 4.1
+// hint: loads external files into PUBLIC website
+function slb_public_scripts() {
+    
+    // register scripts with WordPress's internal library
+    wp_register_script('snappy-list-builder-js-public', plugins_url('/js/public/snappy-list-builder.js', __FILE__),
+    array( 'jquery'), '', true);
+
+    // add to queue of scripts that get loaded into every page
+    wp_enqueue_script('snappy-list-builder-js-public');
+
+    // setup PHP variables to pass into out javascript file
+    $php_vars = [
+        'admin_url' => admin_url(),
+        'ajax_url' => admin_url('admin-ajax.php'),
+        'hello' => 'world'
+    ];
+
+    // pass in our php variables and make them available in javascript as variable php (ex. php.ajax_url)
+    wp_localize_script('snappy-list-builder-js-public', 'php', $php_vars ); 
+}
 
 /* !5. ACTIONS */
 
