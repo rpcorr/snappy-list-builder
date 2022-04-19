@@ -55,7 +55,10 @@ Text Domain: snappy-list-builder
         7.1 - subscribers
         7.2 - lists
 
-    8. ADMINN PAGES
+    8. ADMIN PAGES
+        8.1 - slb_dashboard_admin_page() dashboard admin page
+        8.2 - slb_import_admin_page() import subscribers admin page
+        8.3 - slb_options_admin_page() plugin options admin page 
 
     9. SETTINGS
 
@@ -667,6 +670,54 @@ include_once( plugin_dir_path( __FILE__ ) . 'cpt/slb_list.php');
 
 /* !8. ADMIN PAGES */
 
+// 8.1
+// hint: dashboard admin page
+function slb_dashboard_admin_page() {
+
+    $output = '
+        <div class="wrap">
+
+            <h2>Snappy List Builder</h2>
+
+            <p>The ultimate email list building plugin for WordPress. Capture new subscribers. Reward subscribers with a custom
+    download upon opt-in. Build unlimited lists. Import and export subscribers easily with .csv</p>
+
+        </div>';
+
+    echo $output;
+}
+
+// 8.2 
+// hint: import subscribers admin page
+function slb_import_admin_page() {
+   
+    $output = '
+        <div class="wrap">
+        
+            <h2>Import Subscribers</h2>
+
+            <p>Page description... </p>
+        </div>
+    ';
+
+    echo $output;
+}
+
+// 8.3 
+// hint: plugin options admin page
+function slb_options_admin_page() {
+   
+    $output = '
+        <div class="wrap">
+        
+            <h2>Snappy List Builder options</h2>
+
+            <p>Page description... </p>
+        </div>
+    ';
+
+    echo $output;
+}
 
 
 /* !9. SETTINGS */
@@ -703,7 +754,7 @@ function slb_subscriber_metabox() {
 
     $first_name = (!empty(get_post_meta($post_id, 'slb_first_name', true))) ? get_post_meta( $post_id, 'slb_first_name', true) : '';
     $last_name = (!empty(get_post_meta($post_id, 'slb_last_name', true))) ? get_post_meta( $post_id, 'slb_last_name', true) : '';
-    $email = (!empty(get_post_meta($post_id, 'slb_email', true))) ? get_post_meta( $post_id, 'slb_email', true  ) : '';
+    $email = (!empty(get_post_meta($post_id, 'slb_email', true))) ? get_post_meta( $post_id, 'slb_email', true) : '';
     $lists = (!empty(get_post_meta($post_id, 'slb_list', false))) ? get_post_meta( $post_id, 'slb_list', false) : [];
 
     /*
