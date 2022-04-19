@@ -21,6 +21,9 @@ Text Domain: snappy-list-builder
         1.3 - register custom admin column data
         1.4 - register ajax actions
         1.5 - load external files to public website
+        1.6 - Advance Custom Field settings (for version 5.8.9 or higher)
+        1.7 - register our custom menus
+        1.8 - load external files in WordPress admin    
         
     2. SHORTCODES
         2.1 - slb_register_shortcodes() registers all our custom shortcodes 
@@ -32,17 +35,19 @@ Text Domain: snappy-list-builder
         3.2.2 - slb_register_custom_admin_titles() registers special custom admin title columns
         3.2.3 - slb_custom_admin_titles( $title, $post_id ) handles custom admin title "title" column data for post types without titles; display person name under Subscriber Name
         3.3 - slb_list_column_headers ( $columns ) provide custom heading labels for list custom post 
-        3.4 - slb_list_column_data()  show custom data in admin lists page of the custom post  
+        3.4 - slb_list_column_data()  show custom data in admin lists page of the custom post
+        3.5 - slb_admin_menus() registers custom plugin admin menus  
          
     4. EXTERNAL SCRIPTS
-        4.1 - slb_public_scripts() loads external files into PUBLIC website 
+        4.1 - Include ACF
+        4.2 - slb_public_scripts() loads external files into PUBLIC website
+        4.3 - slb_admin_scripts() loads external files into WordPress ADMIN
 
     5. ACTIONS
         5.1 - slb_save_subscription() saves subscription data to an existing or new subscriber
         5.2 - slb_save_subscriber( $subscriber_data ) creates a new subscriber or updates an existing one
         5.3 - slb_add_subscription( $subscriber_id, $list_id ) adds list to subscribers subscriptions 
-
-        
+   
     6. HELPERS
         6.1 - slb_subscriber_has_subscription( $subscriber_id, $list_id ) returns true or false
         6.2 - slb_get_subscriber_id( $email ) retrieves a subscriber_id from an email address
@@ -96,19 +101,24 @@ add_action('wp_enqueue_scripts', 'slb_public_scripts');
 
 // 1.6
 // hint: Advance Custom Field settings (for version 5.8.9 or higher)
-define('SLB_ACF_PATH', plugin_dir_path( __FILE__ ) . '/lib/advanced-custom-fields/');
-define('SLB_ACF_URL', plugin_dir_url( __FILE__) . '/lib/advanced-custom-fields/');
+add_filter( 'acf/settings/url', 'slb_acf_settings_url');
+add_filter( 'acf/settings/show_admin', 'slb_acf_show_admin');
+add_action('views_edit-slb_subscriber', 'slb_older_acf_warning');
+add_action('views_edit-slb_list', 'slb_older_acf_warning');
+
 $slb_show_acf_admin = false;
 
 if ( class_exists('ACF') ) :
     $slb_show_acf_admin = true;
 endif;
 
-include_once( SLB_ACF_PATH . 'acf.php');
-add_filter( 'acf/settings/url', 'slb_acf_settings_url');
-add_filter( 'acf/settings/show_admin', 'slb_acf_show_admin');
-add_action('views_edit-slb_subscriber', 'slb_older_acf_warning');
-add_action('views_edit-slb_list', 'slb_older_acf_warning');
+// 1.7
+// hint: register our custom menus
+add_action('admin_menu', 'slb_admin_menus');
+
+// 1.8
+// hint: load external files in WordPress admin
+add_action('admin_enqueue_scripts', 'slb_admin_scripts');
 
 /* !2. SHORTCODES */
 
@@ -284,11 +294,42 @@ function slb_list_column_data ( $column, $post_id ) {
     echo $output;
 }
 
+// 3.5
+// hint: registers custom plugin admin menus
+function slb_admin_menus(){
+    
+    /* main menu */
+        
+        $top_menu_item = 'slb_dashboard_admin_page';
+
+        add_menu_page( '', 'List Builder', 'manage_options', 'slb_dashboard_admin_page', 'slb_dashboard_admin_page', 'dashicons-email-alt' );
+
+        /* sub menus */
+            
+            // dashboard
+            add_submenu_page( $top_menu_item, '', 'Dashboard', 'manage_options', $top_menu_item, $top_menu_item );
+
+            // email lists
+            add_submenu_page( $top_menu_item, '', 'Email Lists', 'manage_options', 'edit.php?post_type=slb_list' );
+
+            // subscribers
+            add_submenu_page( $top_menu_item, '', 'Subscribers', 'manage_options', 'edit.php?post_type=slb_subscriber' );
+
+            // import subscribers
+            add_submenu_page( $top_menu_item, '', 'Import Subscribers', 'manage_options', 'slb_import_admin_page', 'slb_import_admin_page' );
+
+            // plugin options
+            add_submenu_page( $top_menu_item, '', 'Plugin Options', 'manage_options', 'slb_options_admin_page', 'slb_options_admin_page' );
+        }
 
 
 /* !4. EXTERNAL SCRIPTS */
 
 // 4.1
+// hint: Include ACF
+include_once( plugin_dir_path( __FILE__ ) . 'lib/advanced-custom-fields/acf.php');   
+
+// 4.2
 // hint: loads external files into PUBLIC website
 function slb_public_scripts() {
     
@@ -312,6 +353,19 @@ function slb_public_scripts() {
     // pass in our php variables and make them available in javascript as variable php (ex. php.ajax_url)
     wp_localize_script('snappy-list-builder-js-public', 'php', $php_vars ); 
 }
+
+// 4.3
+// hint: loads external files into WordPress ADMIN
+function slb_admin_scripts() {
+    
+    // register scripts with WordPress' internal library
+    wp_register_script( 'snappy-list-builder-js-private', plugins_url('/js/private/snappy-list-builder.js', __FILE__), array( 'jquery' ), '', true );
+
+    // add to queue of scripts that get loaded into every admin page
+    wp_enqueue_script( 'snappy-list-builder-js-private' );
+    
+}
+
 
 /* !5. ACTIONS */
 
@@ -710,7 +764,7 @@ function slb_options_admin_page() {
     $output = '
         <div class="wrap">
         
-            <h2>Snappy List Builder options</h2>
+            <h2>Snappy List Builder Options</h2>
 
             <p>Page description... </p>
         </div>
@@ -927,6 +981,7 @@ function slb_subscriber_title( $title, $post_id) {
     return $new_title;
 }
 
+define('SLB_ACF_URL', plugin_dir_url( __FILE__) . '/lib/advanced-custom-fields/');
 
 function slb_acf_settings_url( $url ) {
     return SLB_ACF_URL;
