@@ -55,6 +55,7 @@ Text Domain: snappy-list-builder
         6.4 - slb_return_json( $php_array ) transform result to json string
         6.5 - slb_get_acf_key( $field_name ) gets the unique act field key from the field name
         6.6 - slb_get_subscriber_data( $subscriber_id ) returns an array of subscriber data including subscriptions
+        6.7 - slb_get_page_select( $input_name = "slb_page", $input_id="", $parent=-1, $value_field="id", $selected_value="") returns html for a page selector
 
     7. CUSTOM POST TYPES
         7.1 - subscribers
@@ -710,6 +711,74 @@ function slb_get_subscriber_data( $subscriber_id ) {
     return $subscriber_data;
 }
 
+// 6.7
+// hint: returns html for a page selector
+function slb_get_page_select( $input_name = "slb_page", $input_id="", $parent=-1, $value_field="id", $selected_value="") {
+ 
+    // get WP pages
+    $pages = get_pages(
+        array(
+            'sort_order' => 'asc',
+            'sort_column' => 'post_title',
+            'post_type' => 'page',
+            'parent' => $parent,
+            'status' => array('draft','publish'),
+        )
+    );
+
+    // setup our select html
+    $select = '<select name="' . $input_name . '" ';
+
+    // if $input_id was passed in
+    if ( strlen( $input_id ) ) :
+        
+        // add an input id to our select html
+        $select .= 'id="' . $input_id . '" '; 
+    endif;
+
+    // setup our first option
+    $select .= '><option value="">- Select One -</option>';
+
+    // loop over all the pages
+    foreach ( $pages as &$page ) :
+         
+        // get the page id as our default option value
+        $value = $page->ID;
+
+        // determine which page attribute is the desired value field
+        switch( $value_field ) {
+            case 'slug' :
+                $value = $page->post_name;  
+                break;
+            case 'url' :
+                $value = get_page_link( $page->ID );
+                break;
+            default:
+                $value = $page->ID;
+        }
+
+        // check if this option is the currently selected option
+        $selected = '';
+        if( $selected_value == $value ) :
+            $selected = ' selected="selected" ';
+        endif;
+
+        // build our option html
+        $option = '<option value="' . $value . '" '. $selected . '>';
+        $option .= $page->post_title;
+        $option .='</option>';
+
+        // append our option to the select html
+        $select .= $option;
+        
+    endforeach;
+        
+    // close our  select html tag
+    $select .= '</select>';
+
+    // return our new select
+    return $select;
+}
 
 /* !7. CUSTOM POST TYPES */
 
@@ -761,16 +830,80 @@ function slb_import_admin_page() {
 // hint: plugin options admin page
 function slb_options_admin_page() {
    
-    $output = '
-        <div class="wrap">
+    echo('<div class="wrap">
+
+        <h2>Snappy List Builder Options</h2>
+
+        <form action="options.php" method="post">
         
-            <h2>Snappy List Builder Options</h2>
+            <table class="form-table">
+                <tbody>
+                    
+                    <tr>
+                        <th scope="row"><label for="slb_manage_subscription_page_id">Manage Subscription Page</label></th>
+                        <td>
+                            '. slb_get_page_select( 'slb_manage_subscription_page_id', 'slb_manage_subsciption_page_id', 0, 'id', '') . '
+                            
+                            <p class="description" id="slb_manage_subscription_page_id-description">This is the page where Snappy List 
+                            Builder will send subscribers to confirm their subscriptions. <br/>
+                            IMPORTANT: In order to work, the page you select must contain the shortcode: <strong>[slb_manage_subscriptions]</strong>.
+                            </p>
+                        </td>
+                    </tr>
 
-            <p>Page description... </p>
-        </div>
-    ';
+                    <tr>
+                        <th scope="row"><label for="slb_confirmation_page_id">Opt-In Page</label></th>
+                        <td>
+                            '. slb_get_page_select( 'slb_confirmation_page_id', 'slb_confirmation_page_id', 0, 'id', '') . '
+                            
+                            <p class="description" id="slb_confirmation_page_id-description">This is the page where Snappy List 
+                            Builder will send subscribers to confirm their subscriptions. <br/>
+                            IMPORTANT: In order to work, the page you select must contain the shortcode: <strong>[slb_confirm_subscription]</strong>.
+                            </p>
+                        </td>
+                    </tr>
 
-    echo $output;
+                    <tr>
+                        <th scope="row"><label for="slb_reward_page_id">Download Reward Page</label></th>
+                        <td>
+                            '. slb_get_page_select( 'slb_reward_page_id', 'slb_reward_page_id', 0, 'id', '') . '
+                            
+                            <p class="description" id="slb_reward_page_id-description">This is the page where Snappy List 
+                            Builder will send subscribers to retrieve their reward downloads. <br/>
+                            IMPORTANT: In order to work, the page you select must contain the shortcode: <strong>[slb_download_reward]</strong>.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th scope="row"><label for="slb_default_email_footer">Email Footer</label></th>
+                        <td>');
+                        
+                            // wp_editor will act funny if it's stored in a string, so we run it like this...
+                            wp_editor( '', 'slb_default_email_footer', array( 'textarea_rows'=>8 ) );
+                            
+                        echo('<p class="description" id="slb_default_email_footer-description">The default text that appears
+                        at the end of email generated by this plugin.</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th scope="row"><label for="slb_download_limit">Reward Download Limit</label></th>
+                        <td>
+                            <input type="number" name="slb_download_limit" value="0" class="" />
+                            <p class="description" id="slb_download_limit-description">The amount of download a reward link
+                            will allow before expiring.</p>
+                        </td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+            
+            <p class="submit">
+                <input type="submit" name="submit" id="submit" class="button button-primary" value="Save Changes">
+            </p>
+        </form>
+    </div>');
 }
 
 
