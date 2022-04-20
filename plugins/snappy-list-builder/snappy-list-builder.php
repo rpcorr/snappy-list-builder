@@ -23,7 +23,8 @@ Text Domain: snappy-list-builder
         1.5 - load external files to public website
         1.6 - Advance Custom Field settings (for version 5.8.9 or higher)
         1.7 - register our custom menus
-        1.8 - load external files in WordPress admin    
+        1.8 - load external files in WordPress admin
+        1.9 - register plugin options
         
     2. SHORTCODES
         2.1 - slb_register_shortcodes() registers all our custom shortcodes 
@@ -56,6 +57,9 @@ Text Domain: snappy-list-builder
         6.5 - slb_get_acf_key( $field_name ) gets the unique act field key from the field name
         6.6 - slb_get_subscriber_data( $subscriber_id ) returns an array of subscriber data including subscriptions
         6.7 - slb_get_page_select( $input_name = "slb_page", $input_id="", $parent=-1, $value_field="id", $selected_value="") returns html for a page selector
+        6.8 - slb_get_default_options() returns default option value as an associative array
+        6.9 - slb_get_option( $option_name ) returns the requested page option value or it's default
+        6.10 - slb_get_current_options() gets the current options and returns values in associative array
 
     7. CUSTOM POST TYPES
         7.1 - subscribers
@@ -67,6 +71,7 @@ Text Domain: snappy-list-builder
         8.3 - slb_options_admin_page() plugin options admin page 
 
     9. SETTINGS
+        9.1 - slb_register_options() registers all our plugin options
 
     10. MISC.
         10.1 - slb_add_subscriber_metaboxes( $post ) add subscriber metaboxes to the admin page
@@ -120,6 +125,11 @@ add_action('admin_menu', 'slb_admin_menus');
 // 1.8
 // hint: load external files in WordPress admin
 add_action('admin_enqueue_scripts', 'slb_admin_scripts');
+
+// 1.9
+// hint: register plugin options
+add_action( 'admin_init', 'slb_register_options');
+
 
 /* !2. SHORTCODES */
 
@@ -780,6 +790,122 @@ function slb_get_page_select( $input_name = "slb_page", $input_id="", $parent=-1
     return $select;
 }
 
+// 6.8
+// hint: returns default option value as an associative array
+function slb_get_default_options() {
+    
+    $defaults = array();
+
+    try {
+        
+        // get front page id
+        $front_page_id = get_option( 'page_on_front');
+
+        // setup default email footer
+        $default_email_footer = '
+            <p>
+                Sincerely, <br/><br/>
+                The ' . get_bloginfo( 'name' ) . ' Team<br/>
+                <a href="' . get_bloginfo( 'url') . '">' . get_bloginfo( 'url') . '</a>
+            </p>
+        ';
+
+        // setup defaults array
+        $defaults = array(
+          'slb_manage_subscription_page_id' => $front_page_id,
+          'slb_confirmation_page_id' => $front_page_id,
+          'slb_reward_page_id' => $front_page_id,
+          'slb_default_email_footer' => $default_email_footer,
+          'slb_download_limit' => 3,
+        ); 
+
+    } catch( Exception $e ) {
+        
+        // php error
+    }
+
+    // return defaults
+    return $defaults;
+}
+
+// 6.9
+// hint: returns the requested page option value or it's default
+function slb_get_option( $option_name ) {
+    
+    // setup our return variable
+    $option_value = '';
+
+    try {
+
+        // get default option values
+        $defaults = slb_get_default_options();
+
+        // get the requested option
+        switch( $option_name ) {
+            
+            case 'slb_manage_subscription_page_id' :
+                // subscription page id
+                $option_value = ( get_option('slb_manage_subscription_page_id')) ? 
+                get_option('slb_manage_subscription_page_id') : $defaults[ 'slb_manage_subscription_page_id'];
+                break;
+            case 'slb_confirmation_page_id' :
+                // confirmation page id
+                $option_value = ( get_option('slb_confirmation_page_id')) ? 
+                get_option('slb_confirmation_page_id') : $defaults[ 'slb_confirmation_page_id'];
+                break;
+            case 'slb_reward_page_id' :
+                // reward page id
+                $option_value = ( get_option('slb_reward_page_id')) ? 
+                get_option('slb_reward_page_id') : $defaults[ 'slb_reward_page_id'];
+                break;
+            case 'slb_default_email_footer' :
+                // email footer
+                $option_value = ( get_option('slb_default_email_footer')) ? 
+                get_option('slb_default_email_footer') : $defaults[ 'slb_default_email_footer'];
+                break;
+            case 'slb_download_limit' :
+                // reward download limit
+                $option_value = ( get_option('slb_download_limit')) ? 
+                get_option('slb_download_limit') : $defaults[ 'slb_download_limit'];
+                break;
+        }
+        
+    } catch( Exception $e ) {
+            
+    }
+    
+    // return option value or it's default
+    return $option_value;
+}
+
+// 6.10
+// hint: gets the current options and returns values in associative array
+function slb_get_current_options() {
+
+    // setup our return variable
+    $current_options = array();
+
+    try {
+        
+        // build our current options associative array
+        $current_options = array(
+              'slb_manage_subscription_page_id' => slb_get_option('slb_manage_subscription_page_id'),
+              'slb_confirmation_page_id' => slb_get_option('slb_confirmation_page_id'),
+              'slb_reward_page_id' => slb_get_option('slb_reward_page_id'),
+              'slb_default_email_footer' => slb_get_option('slb_default_email_footer'),
+              'slb_download_limit' => slb_get_option('slb_download_limit'),
+        );
+    } catch( Exception $e ) {
+        
+        // php error
+    }
+
+    // return current options
+    return $current_options;
+}
+
+
+
 /* !7. CUSTOM POST TYPES */
 
 // 7.1 
@@ -829,20 +955,31 @@ function slb_import_admin_page() {
 // 8.3 
 // hint: plugin options admin page
 function slb_options_admin_page() {
+
+    // get the default values for our options
+    $options = slb_get_current_options();
    
     echo('<div class="wrap">
 
         <h2>Snappy List Builder Options</h2>
 
-        <form action="options.php" method="post">
+        <form action="options.php" method="post">');
+
+            // outputs a unique nounce for our plugin options
+            settings_fields('slb_plugin_options');
+
+            // generates a unique hidden field with our form handling url
+            do_settings_fields('slb_plugin_options', '');
         
-            <table class="form-table">
+           echo('
+           
+           <table class="form-table">
                 <tbody>
                     
                     <tr>
                         <th scope="row"><label for="slb_manage_subscription_page_id">Manage Subscription Page</label></th>
                         <td>
-                            '. slb_get_page_select( 'slb_manage_subscription_page_id', 'slb_manage_subsciption_page_id', 0, 'id', '') . '
+                            '. slb_get_page_select( 'slb_manage_subscription_page_id', 'slb_manage_subsciption_page_id', 0, 'id', $options['slb_manage_subscription_page_id']) . '
                             
                             <p class="description" id="slb_manage_subscription_page_id-description">This is the page where Snappy List 
                             Builder will send subscribers to confirm their subscriptions. <br/>
@@ -854,7 +991,7 @@ function slb_options_admin_page() {
                     <tr>
                         <th scope="row"><label for="slb_confirmation_page_id">Opt-In Page</label></th>
                         <td>
-                            '. slb_get_page_select( 'slb_confirmation_page_id', 'slb_confirmation_page_id', 0, 'id', '') . '
+                            '. slb_get_page_select( 'slb_confirmation_page_id', 'slb_confirmation_page_id', 0, 'id', $options['slb_manage_confirmation_page_id']) . '
                             
                             <p class="description" id="slb_confirmation_page_id-description">This is the page where Snappy List 
                             Builder will send subscribers to confirm their subscriptions. <br/>
@@ -866,7 +1003,7 @@ function slb_options_admin_page() {
                     <tr>
                         <th scope="row"><label for="slb_reward_page_id">Download Reward Page</label></th>
                         <td>
-                            '. slb_get_page_select( 'slb_reward_page_id', 'slb_reward_page_id', 0, 'id', '') . '
+                            '. slb_get_page_select( 'slb_reward_page_id', 'slb_reward_page_id', 0, 'id', $options['slb_reward_page_id']) . '
                             
                             <p class="description" id="slb_reward_page_id-description">This is the page where Snappy List 
                             Builder will send subscribers to retrieve their reward downloads. <br/>
@@ -880,7 +1017,7 @@ function slb_options_admin_page() {
                         <td>');
                         
                             // wp_editor will act funny if it's stored in a string, so we run it like this...
-                            wp_editor( '', 'slb_default_email_footer', array( 'textarea_rows'=>8 ) );
+                            wp_editor( $options['slb_default_email_footer'], 'slb_default_email_footer', array( 'textarea_rows'=>8 ) );
                             
                         echo('<p class="description" id="slb_default_email_footer-description">The default text that appears
                         at the end of email generated by this plugin.</p>
@@ -890,24 +1027,38 @@ function slb_options_admin_page() {
                     <tr>
                         <th scope="row"><label for="slb_download_limit">Reward Download Limit</label></th>
                         <td>
-                            <input type="number" name="slb_download_limit" value="0" class="" />
+                            <input type="number" name="slb_download_limit" value="' . $options['slb_download_limit'] . '" class="" />
                             <p class="description" id="slb_download_limit-description">The amount of download a reward link
                             will allow before expiring.</p>
                         </td>
                     </tr>
                     
                 </tbody>
-            </table>
+            </table>');
+
+            // outputs the WP submit button HTML
+            @submit_button();
             
-            <p class="submit">
+            /*<p class="submit">
                 <input type="submit" name="submit" id="submit" class="button button-primary" value="Save Changes">
-            </p>
-        </form>
+            </p>*/
+        echo('</form>
     </div>');
 }
 
 
 /* !9. SETTINGS */
+
+// 9.1 
+// hint: registers all our plugin options
+function slb_register_options() {
+    // plugin options
+    register_setting( 'slb_plugin_options', 'slb_manage_subscription_page_id' );
+    register_setting( 'slb_plugin_options', 'slb_confirmation_page_id' );
+    register_setting( 'slb_plugin_options', 'slb_reward_page_id' );
+    register_setting( 'slb_plugin_options', 'slb_default_email_footer' );
+    register_setting( 'slb_plugin_options', 'slb_download_limit' ); 
+}
 
 
 
