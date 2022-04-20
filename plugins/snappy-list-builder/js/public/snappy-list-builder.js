@@ -7,12 +7,12 @@ jQuery(document).ready(function($){
     console.log(php.hello); // prints "world" to the console
 
     // email capture action url
-    var email_capture_url = wpajax_url += '?action=slb_save_subscription';
+    var email_capture_url = wpajax_url + '?action=slb_save_subscription';
 
-    $('form.slb-form').bind('submit', function(){
+    $('form#slb_register_form').bind('submit', function(){
 
         // get the jquery form object
-        $form = $(this);  // $this = $('form.slb-form)
+        $form = $(this);  // $this = $('form#slb-register_form')
         
         // setup our form data for our ajax post
         var form_data = $form.serialize();
@@ -40,6 +40,50 @@ jQuery(document).ready(function($){
                         msg += '\r';
                         msg += '- ' + value;
                     });
+                    
+                    // notify the user of the error
+                    alert( msg );
+                }
+            },
+            'error': function( jqXHR, textStatus, errorThrown ) {
+                    // ajax didn't work
+            }
+        });
+
+        // stop the form from submitting normally
+        return false;
+    });
+
+    // email capture action url
+    var unsubscribe_url = wpajax_url + '?action=slb_unsubscribe';
+
+    $(document).on('submit','form#slb_manage_subscriptions_form', function() {
+
+        // get the jquery form object
+        $form = $(this);  // $this = $('form#slb_manage_subscription_form')
+
+        // setup our form data for our ajax post
+        var form_data = $form.serialize();
+
+        // submit our form data with ajax
+        $.ajax({
+            'method': 'post',
+            'url': unsubscribe_url,
+            'data': form_data,
+            'dataType': 'json',
+            'cache': false,
+            'success': function( data, textStatus ) {
+                console.log(data);
+                if( data.status == 1){
+                    // success
+                    // update form html
+                    $form.replaceWith(data.html);
+                    // notify the user of success
+                    alert( data.message );
+                } else {
+                    // error
+                    // begin building our error messge text
+                    var msg = data.message + '\r' + data.error + '\r';
                     
                     // notify the user of the error
                     alert( msg );
