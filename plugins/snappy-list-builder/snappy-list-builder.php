@@ -51,6 +51,7 @@ Text Domain: snappy-list-builder
         5.3 - slb_add_subscription( $subscriber_id, $list_id ) adds list to subscribers subscriptions
         5.4 - slb_unsubscribe() removes one or more subscriptions from a subscriber and notifies them via email
         5.5 - slb_remove_subscription( $subscriber_id, $list_id ) removes a single subscription from a subscriber
+        5.6 - slb_send_subscriber_email( $subscriber_id, $email_template_name,  $list_id ) sends a unique customize email to a subscriber
    
     6. HELPERS
         6.1 - slb_subscriber_has_subscription( $subscriber_id, $list_id ) returns true or false
@@ -64,8 +65,12 @@ Text Domain: snappy-list-builder
         6.9 - slb_get_option( $option_name ) returns the requested page option value or it's default
         6.10 - slb_get_current_options() gets the current options and returns values in associative array
         6.11 - slb_get_manage_subscriptions_html( $subscriber_id) generates an html for managing subscriptions
-
-
+        6.12 - slb_get_email_template( $subscriber_id, $email_template_name, $list_id ) returns an array of email template data IF the template exists
+        6.13 - slb_validate_list( $list_object ) validates whether the post object exists and that it's a validate list post_type
+        6.14 - slb_validate_subscriber( $subscriber_object ) validates whether the post object exists and that it's a validate subscriber post_type
+        6.15 - slb_get_manage_subscriptions_link( $email, $list_id=0 ) returns a unique link for managing a particular users subscriptions
+        6.16 - slb_get_querystring_start( $permalink ) returns the appropriate character for the begining of a querystring
+        
     7. CUSTOM POST TYPES
         7.1 - subscribers
         7.2 - lists
@@ -498,11 +503,30 @@ function slb_save_subscription() {
                     $subscription_saved = slb_add_subscription( $subscriber_id, $list_id );
                     
                     // if subscription was saved successfully
-                    if( $subscription_saved ):
-                        
-                        // subscription saved!
-                        $result[ 'status' ] = 1;
-                        $result[ 'message' ] = 'Subscription saved';
+                    if( $subscription_saved ) :
+
+                        // send new subscriber a confirmation email, returns true if we were successful
+                        $email_sent = slb_send_subscriber_email( $subscriber_id, 'new_subscription', $list_id );
+
+                        // if email was sent
+                        if ( !$email_sent ) :
+                            
+                            // remove subscription
+                            slb_remove_subscription( $subscriber_id, $list_id );
+
+                            // email could not be sent
+                            $result[ 'error' ] = 'Unable to send email. ';
+
+                        else :
+
+                            // email sent and subscription saved!
+                            $result[ 'status' ] = 1;
+                            $result[ 'message' ] = 'Success! A confirmation email has been sent to '. $subscriber_data[ $email ];
+                            
+                            // clean up: remove our empty error
+                            unset( $result[ $error ]);
+                            
+                        endif;
                         
                     else :
                         // return detailed error
@@ -670,7 +694,35 @@ function slb_remove_subscription( $subscriber_id, $list_id ) {
 
     // return result
     return $subscription_saved;
-}  
+}
+
+// 5.6
+// hint: sends a unique customize email to a subscriber
+function slb_send_subscriber_email( $subscriber_id, $email_template_name,  $list_id ) {
+
+    // setup return variable
+    $email_sent = false;
+
+    // get email template data
+    $email_template_object = slb_get_email_template( $subscriber_id, $email_template_name, $list_id );
+
+    // if email template data was found
+    if ( !empty( $email_template_object ) ) :
+        
+        // get subscriber data
+        $subscriber_data = slb_get_subscriber_data( $subscriber_id );
+
+        // set wp_mail headers
+        $wp_mail_headers = array( 'Content-Type: text/html; charset=UTF-8' );
+
+        // use wp_mail to send email
+        $email_sent = wp_mail( array( $subscriber_data[ 'email']), $email_template_object[ 'subject'],
+        $email_template_object[ 'body'], $wp_mail_headers );
+        
+    endif;
+    
+    return $email_sent;
+}
 
 /* !6. HELPERS */
 
@@ -1104,6 +1156,149 @@ function slb_get_manage_subscriptions_html( $subscriber_id) {
     return $output;
 }
 
+// 6.12
+// hint: returns an array of email template data IF the template exists
+function slb_get_email_template( $subscriber_id, $email_template_name, $list_id ) {
+
+    // setup return variable
+    $template_data = array();
+
+    // create new array to store email templates
+    $email_templates = array();
+
+    // get list object
+    $list = get_post( $list_id );
+
+    // get subscriber object
+    $subscriber = get_post( $subscriber_id );
+
+    if( !slb_validate_list( $list ) || !slb_validate_subscriber( $subscriber ) ) :
+
+        // the list or the subscriber is not valid
+
+    else :
+
+        // get subscriber data
+        $subscriber_data = slb_get_subscriber_data( $subscriber_id );
+
+        // get unique manage subscription link
+        $manage_subscriptions_link = slb_get_manage_subscriptions_link( $subscriber_data[ 'email' ], $list_id );
+        
+        // get default email header
+        $default_email_header = '
+            <p>
+                Hello, '. $subscriber_data[ 'fname' ] . ' 
+            </p>
+        ';
+
+        // get default email footer
+        $default_email_footer =slb_get_option( 'slb_default_email_footer' );
+
+        // setup unsubscribe text
+        $unsubscribe_text = '
+            <br /><br />
+            <hr />
+            <p><a href="' . $manage_subscriptions_link .'">Click here to unsubscribe</a> from this or any other email list.</p>';
+        
+        
+        // setup email templates
+
+            // template: new_subscription
+            $email_templates[ 'new_subscription' ] = array(
+              'subject' => 'Thank you for subscribing to ' . $list->post_title . '!',
+              'body' => '
+                    ' . $default_email_header . '
+                    <p>Thank you for subscribing to ' . $list->post_title .'!</p>
+                    ' . $default_email_footer . $unsubscribe_text,
+            );
+                     
+    endif;
+
+    // if the requested email template exists
+    if ( isset( $email_templates[ $email_template_name] ) ) :
+
+        // add template data to return variable
+        $template_data = $email_templates[ $email_template_name ];
+        
+    endif;
+
+    // return template_data
+    return $template_data;
+    
+}
+
+// 6.13 
+// hint: validates whether the post object exists and that it's a validate list post_type
+function slb_validate_list( $list_object ) {
+    
+    $list_valid = false;
+
+    if ( isset( $list_object->post_type) && $list_object->post_type == 'slb_list' ) :
+
+        $list_valid = true;
+    
+    endif;
+
+    return $list_valid;
+}
+
+// 6.14
+// hint: validates whether the post object exists and that it's a validate subscriber post_type
+function slb_validate_subscriber( $subscriber_object ) {
+    
+    $subscriber_valid = false;
+
+    if ( isset( $subscriber_object->post_type) && $subscriber_object->post_type == 'slb_subscriber' ) :
+
+        $subscriber_valid = true;
+    
+    endif;
+
+    return $subscriber_valid;
+}
+
+// 6.15
+// hint: returns a unique link for managing a particular users subscriptions
+function slb_get_manage_subscriptions_link( $email, $list_id=0 ) {
+    
+    $link_href = '';
+
+    try {
+
+        $page = get_post( slb_get_option( 'slb_manage_subscription_page_id ') );
+        $slug = $page->post_name;
+
+        $permalink = get_permalink( $page );
+
+        // get character to start query string
+        $startquery = slb_get_querystring_start( $permalink );
+
+        $link_href = $permalink . $startquery . 'email=' . urlencode($email) . '&list=' . $list_id;
+    
+    } catch( Exception $e ) {
+    
+        //$link_href = $e->getMessage();
+    }
+
+    return esc_url( $link_href );
+}
+
+// 6.16
+// hint: returns the appropriate character for the begining of a querystring
+function slb_get_querystring_start( $permalink ) { 
+    
+    // setup our default return variable
+    $querystring_start = '&';
+
+    // if ? is not found in the permalink
+    if ( strpos( $permalink, '?') == false ) :
+        $querystring_start = '?';
+    endif;
+
+    return $querystring_start;
+    
+}
+ 
 /* !7. CUSTOM POST TYPES */
 
 // 7.1 
@@ -1488,5 +1683,7 @@ function slb_older_acf_warning( $views ) {
             Some features of Snappy List Builder may not work unless you update to version ' . $acf_ver_req  . ' or deactivate this plugin.</strong>
         </p>';
     }
+    
+    return $views;
     return $views;
 }
