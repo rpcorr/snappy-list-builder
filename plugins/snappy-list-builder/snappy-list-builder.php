@@ -799,8 +799,16 @@ function slb_confirm_subscription( $subscriber_id, $list_id ) {
     // if subscription was saved
     if ( $subscription_saved ) :
 
-        // return true
-        $optin_complete = true;
+        // send email
+        $email_sent = slb_send_subscriber_email( $subscriber_id, 'subscription_confirmed', $list_id );
+        
+        // if email sent
+        if ( $email_sent ) :
+            
+            // return true
+            $optin_complete = true;
+            
+        endif;
             
     endif;
 
@@ -1297,6 +1305,15 @@ function slb_get_email_template( $subscriber_id, $email_template_name, $list_id 
                     ' . $default_email_header . '
                     <p>Thank you for subscribing to ' . $list->post_title .'!</p>
                     <p>Please <a href="' . $optin_link . '">click here to confirm your subscription.</a></p>
+                    ' . $default_email_footer . $unsubscribe_text,
+            );
+
+            // template: subscription_confirmed
+            $email_templates[ 'subscription_confirmed' ] = array(
+              'subject' => 'You are now subscribed to ' . $list->post_title . '!',
+              'body' => '
+                    ' . $default_email_header . '
+                    <p>Thank you for confirming your subscription. You are now subscribed to ' . $list->post_title .'!</p>
                     ' . $default_email_footer . $unsubscribe_text,
             );
                      
