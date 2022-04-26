@@ -286,7 +286,7 @@ function slb_confirm_subscription_shortcode( $args, $content="" ) {
             if( !slb_subscriber_has_subscription( $subscriber_id, $list_id ) ) :
 
                 // complete opt-in
-                $optin_complete = slb_confirmation_subscription( $subscriber_id, $list_id );
+                $optin_complete = slb_confirm_subscription( $subscriber_id, $list_id );
 
                 if ( !$optin_complete ) :
                     
