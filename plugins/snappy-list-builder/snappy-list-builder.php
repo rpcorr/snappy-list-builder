@@ -30,6 +30,7 @@ Text Domain: snappy-list-builder
         2.1 - slb_register_shortcodes() registers all our custom shortcodes 
         2.2 - slb_form_shortcode( $args, $content="" ) returns a html string for an email capture form
         2.3 - slb_manage_subscriptions_shortcode( $args, $content = "" ) displays a form for managing the users list subscriptions
+        2.4 - slb_confirm_subscription_shortcode( $args, $content="" ) display subscription opt-in confirmation text and link message subscriptions
 
     3. FILTERS
         3.1 - slb_subscriber_column_headers ( $columns ) provide custom heading labels for subscriber custom post
@@ -52,6 +53,7 @@ Text Domain: snappy-list-builder
         5.4 - slb_unsubscribe() removes one or more subscriptions from a subscriber and notifies them via email
         5.5 - slb_remove_subscription( $subscriber_id, $list_id ) removes a single subscription from a subscriber
         5.6 - slb_send_subscriber_email( $subscriber_id, $email_template_name,  $list_id ) sends a unique customize email to a subscriber
+        5.7 - slb_confirm_subscription( $subscriber_id, $list_id ) add subscription to database and emails subscriber confirmation email 
    
     6. HELPERS
         6.1 - slb_subscriber_has_subscription( $subscriber_id, $list_id ) returns true or false
@@ -70,6 +72,8 @@ Text Domain: snappy-list-builder
         6.14 - slb_validate_subscriber( $subscriber_object ) validates whether the post object exists and that it's a validate subscriber post_type
         6.15 - slb_get_manage_subscriptions_link( $email, $list_id=0 ) returns a unique link for managing a particular users subscriptions
         6.16 - slb_get_querystring_start( $permalink ) returns the appropriate character for the begining of a querystring
+        6.17 - slb_get_optin_link( $email, $list_id=0 ) returns a unique link for opting into an email list
+        6.18 - slb_get_message_html( $message, $message_type ) returns html for message
         
     7. CUSTOM POST TYPES
         7.1 - subscribers
@@ -150,6 +154,7 @@ add_action( 'admin_init', 'slb_register_options');
 function slb_register_shortcodes() {
     add_shortcode( 'slb_form', 'slb_form_shortcode' );
     add_shortcode( 'slb_manage_subscriptions', 'slb_manage_subscriptions_shortcode' );
+    add_shortcode( 'slb_confirm_subscription', 'slb_confirm_subscription_shortcode' );
 }
 
 // 2.2
@@ -249,6 +254,79 @@ function slb_manage_subscriptions_shortcode( $args, $content = "" ) {
     $output .= '</div>';
 
     // return the html
+    return $output;
+}
+
+// 2.4
+// hint: display subscription opt-in confirmation text and link message subscriptions
+// example: [slb_confirm_subscription]
+function slb_confirm_subscription_shortcode( $args, $content="" ) {
+    
+    // setup output variable
+    $output = '<div class="slb">';
+    
+    // setup email and list_id variables and handle if they are not defined in the GET scope
+    $email = ( isset( $_GET['email'] ) ) ? esc_attr( $_GET['email'] ) : '';
+    $list_id = ( isset( $_GET['list'] ) ) ? esc_attr( $_GET['list'] ) : 0;
+
+    // get subscriber id from email
+    $subscriber_id = slb_get_subscriber_id( $email );
+    $subscriber = get_post( $subscriber_id );
+    
+    // if we found a subscriber matching that email address
+    if ( $subscriber_id && slb_validate_subscriber( $subscriber ) ) :
+        
+        // get list object
+        $list = get_post( $list_id );
+
+        // if list and subscriber are valid
+        if( slb_validate_list( $list ) ) :
+        
+            // if subscriptions has not yet been added
+            if( !slb_subscriber_has_subscription( $subscriber_id, $list_id ) ) :
+
+                // complete opt-in
+                $optin_complete = slb_confirm_subscription( $subscriber_id, $list_id );
+
+                if ( !$optin_complete ) :
+                    
+                    $output .= slb_get_message_html( 'Due to an unknown error, we were unable to confirm your subscription',
+                'error' );
+
+                    $output .= '</div>';
+                
+                    return $output;
+                    
+                endif;
+                
+            endif;
+
+            // get confirmation message html and append it to output
+            $output .= slb_get_message_html( 'Your subscription to ' . $list->post_title . ' has now been confirmed.',
+            'confirmation' );
+
+            // get manage subscriptions link
+            $manage_subscriptions_link = slb_get_manage_subscriptions_link( $email, $list_id );  // missing $list_id in lecture
+
+            // append link to output
+            $output .= '<p><a href="' . $manage_subscriptions_link . '">Click here to manage your subscriptions.</a></p>';  
+        
+        else :
+            
+            $output .= slb_get_message_html( 'This link is invaild.', 'error' );
+                 
+        endif;
+    
+    else :
+
+        $output .= slb_get_messge_html( 'This link is invalid. Invalid Subscriber ' . $email . '.', 'error' );
+            
+    endif;
+
+    // close .slb div
+    $output .= '</div>';
+    
+    // return output html
     return $output;
 }
 
@@ -447,7 +525,6 @@ function slb_save_subscription() {
         'message' => 'Subscription was not saved. ',
         'error' => '',
         'errors' => array()
-        
     );
 
     try {
@@ -498,39 +575,24 @@ function slb_save_subscription() {
                     $result[ 'error' ] .= esc_attr( $subscriber_data['email'] . ' is already subscribed to ' . $list->post_title . '.');
 
                 else :
-                    
-                    // save new subscription
-                    $subscription_saved = slb_add_subscription( $subscriber_id, $list_id );
-                    
-                    // if subscription was saved successfully
-                    if( $subscription_saved ) :
 
-                        // send new subscriber a confirmation email, returns true if we were successful
-                        $email_sent = slb_send_subscriber_email( $subscriber_id, 'new_subscription', $list_id );
+                    // send new subscriber a confirmation email, returns true if we were successful
+                    $email_sent = slb_send_subscriber_email( $subscriber_id, 'new_subscription', $list_id );
 
-                        // if email was sent
-                        if ( !$email_sent ) :
-                            
-                            // remove subscription
-                            slb_remove_subscription( $subscriber_id, $list_id );
+                    // if email was sent
+                    if ( !$email_sent ) :
 
-                            // email could not be sent
-                            $result[ 'error' ] = 'Unable to send email. ';
+                        // email could not be sent
+                        $result[ 'error' ] = 'Unable to send email. ';
 
-                        else :
-
-                            // email sent and subscription saved!
-                            $result[ 'status' ] = 1;
-                            $result[ 'message' ] = 'Success! A confirmation email has been sent to '. $subscriber_data[ $email ];
-                            
-                            // clean up: remove our empty error
-                            unset( $result[ $error ]);
-                            
-                        endif;
-                        
                     else :
-                        // return detailed error
-                        $result[ 'error' ] = 'Unable to save subscription.';
+
+                        // email sent and subscription saved!
+                        $result[ 'status' ] = 1;
+                        $result[ 'message' ] = 'Success! A confirmation email has been sent to '. $subscriber_data[ $email ];
+                        
+                        // clean up: remove our empty error
+                        unset( $result[ $error ]);
                         
                     endif;
                     
@@ -716,12 +778,34 @@ function slb_send_subscriber_email( $subscriber_id, $email_template_name,  $list
         $wp_mail_headers = array( 'Content-Type: text/html; charset=UTF-8' );
 
         // use wp_mail to send email
-        $email_sent = wp_mail( array( $subscriber_data[ 'email']), $email_template_object[ 'subject'],
-        $email_template_object[ 'body'], $wp_mail_headers );
+        $email_sent = wp_mail( array( $subscriber_data[ 'email'] ), $email_template_object[ 'subject'],
+        $email_template_object[ 'body' ], $wp_mail_headers );
         
     endif;
     
     return $email_sent;
+}
+
+// 5.7
+// hint add subscription to database and emails subscriber confirmation email
+function slb_confirm_subscription( $subscriber_id, $list_id ) {
+    
+    // setup return variable
+    $optin_complete = false;
+
+    // add new subscription
+    $subscription_saved = slb_add_subscription( $subscriber_id, $list_id );
+
+    // if subscription was saved
+    if ( $subscription_saved ) :
+
+        // return true
+        $optin_complete = true;
+            
+    endif;
+
+    // return result
+    return $optin_complete;
 }
 
 /* !6. HELPERS */
@@ -1203,12 +1287,16 @@ function slb_get_email_template( $subscriber_id, $email_template_name, $list_id 
         
         // setup email templates
 
+            // get unique opt-in link
+            $optin_link = slb_get_optin_link( $subscriber_data[ 'email' ], $list_id );
+
             // template: new_subscription
             $email_templates[ 'new_subscription' ] = array(
-              'subject' => 'Thank you for subscribing to ' . $list->post_title . '!',
+              'subject' => 'Thank you for subscribing to ' . $list->post_title . '! Please confirm your subscription.',
               'body' => '
                     ' . $default_email_header . '
                     <p>Thank you for subscribing to ' . $list->post_title .'!</p>
+                    <p>Please <a href="' . $optin_link . '">click here to confirm your subscription.</a></p>
                     ' . $default_email_footer . $unsubscribe_text,
             );
                      
@@ -1265,7 +1353,7 @@ function slb_get_manage_subscriptions_link( $email, $list_id=0 ) {
 
     try {
 
-        $page = get_post( slb_get_option( 'slb_manage_subscription_page_id ') );
+        $page = get_post( slb_get_option( 'slb_manage_subscription_page_id') );
         $slug = $page->post_name;
 
         $permalink = get_permalink( $page );
@@ -1296,7 +1384,67 @@ function slb_get_querystring_start( $permalink ) {
     endif;
 
     return $querystring_start;
+}
+
+// 6.17
+// hint: returns a unique link for opting into an email list
+function slb_get_optin_link( $email, $list_id=0 ) {
     
+    $link_href = '';
+
+    try {
+
+        $page = get_post( slb_get_option( 'slb_confirmation_page_id') );
+        $slug = $page->post_name;
+        $permalink = get_permalink( $page );
+
+        // get character to start query string
+        $startquery = slb_get_querystring_start( $permalink );
+
+        $link_href = $permalink . $startquery . 'email=' . urlencode( $email ) . '&list=' . $list_id;
+
+    } catch ( Exception $e) {
+        
+        // $link_href = $e-> getMessage();
+    }
+
+    return esc_url( $link_href );
+}
+
+// 6.18
+// hint: returns html for message
+function slb_get_message_html( $message, $message_type ) {
+    
+    $output = '';
+    
+    try {
+        
+        $message_class  ='confirmation';
+        
+        switch( $message_type ) {
+            case 'warning':
+                $message_class = 'slb-warning';
+                break;
+            case 'error':
+                $message_class = 'slb-error';
+                break;
+            default :
+                $message_class = 'slb-confirmation';
+                break;
+        }
+        
+        $output .= '
+            <div class="slb-message-container">
+                <div class="slb-message '. $message_class . '">
+                    <p>' . $message . '</p>
+                </div>
+            </div>';
+            
+    } catch ( Exception $e ) {
+        
+    }
+
+    return $output;
 }
  
 /* !7. CUSTOM POST TYPES */
@@ -1384,7 +1532,7 @@ function slb_options_admin_page() {
                     <tr>
                         <th scope="row"><label for="slb_confirmation_page_id">Opt-In Page</label></th>
                         <td>
-                            '. slb_get_page_select( 'slb_confirmation_page_id', 'slb_confirmation_page_id', 0, 'id', $options['slb_manage_confirmation_page_id']) . '
+                            '. slb_get_page_select( 'slb_confirmation_page_id', 'slb_confirmation_page_id', 0, 'id', $options['slb_confirmation_page_id']) . '
                             
                             <p class="description" id="slb_confirmation_page_id-description">This is the page where Snappy List 
                             Builder will send subscribers to confirm their subscriptions. <br/>
