@@ -74,6 +74,7 @@ Text Domain: snappy-list-builder
         6.16 - slb_get_querystring_start( $permalink ) returns the appropriate character for the begining of a querystring
         6.17 - slb_get_optin_link( $email, $list_id=0 ) returns a unique link for opting into an email list
         6.18 - slb_get_message_html( $message, $message_type ) returns html for message
+        6.19 - slb_get_list_reward( $list_id ) returns false if list has no reward or returns the object containing file and title if it does
         
     7. CUSTOM POST TYPES
         7.1 - subscribers
@@ -127,6 +128,7 @@ add_filter( 'acf/settings/url', 'slb_acf_settings_url');
 add_filter( 'acf/settings/show_admin', 'slb_acf_show_admin');
 add_action('views_edit-slb_subscriber', 'slb_older_acf_warning');
 add_action('views_edit-slb_list', 'slb_older_acf_warning');
+//if( !defined( 'ACF_LITE') ) define( 'ACF_LITE', true );  // turn off ACF plugin menu
 
 $slb_show_acf_admin = false;
 
@@ -414,6 +416,7 @@ function slb_list_column_headers ( $columns ) {
     $columns = array (
         'cb' => '<input type="checkbox" />',
         'title' => __('List Name'),
+        'reward' => __('Opt-in Reward'),
         'shortcode' => __('Shortcode'),
     );
 
@@ -431,6 +434,12 @@ function slb_list_column_data ( $column, $post_id ) {
     
     switch ( $column )  {
         
+        case 'reward' :
+            $reward = slb_get_list_reward( $post_id );
+            if( $reward !== false ) :                
+                $output .= '<a href="' . $reward['file']['url'] . '" download="' . $reward['title'] . '">' . $reward['title'] .'</a>';
+            endif;
+            break;
         case 'shortcode' :
             $output .= '[slb_form id="' . $post_id . '"]';
             break;
@@ -946,16 +955,25 @@ function slb_get_acf_key( $field_name ) {
     switch( $field_name ) {
 
         case 'slb_fname' :
-            $field_key = "field_625986f2d899d";
+            $field_key = 'field_625986f2d899d';
             break;
         case 'slb_lname' :
-            $field_key = "field_6259873cd899e";
+            $field_key = 'field_6259873cd899e';
             break;
         case 'slb_email' :
-            $field_key = "field_625987ab273b4";
+            $field_key = 'field_625987ab273b4';
             break;
         case 'slb_subscriptions' :
-            $field_key = "field_62598806273b5";
+            $field_key = 'field_62598806273b5';
+            break;
+        case 'slb_enable_reward' :
+            $field_key = 'field_626b5ea4134fe';
+            break;
+        case 'slb_reward_title' :
+            $field_key = 'field_626b5fb9134ff';
+            break;
+        case 'slb_reward_file' :
+            $field_key = 'field_626b605ce70c2';
             break;
     }
     
@@ -1463,6 +1481,45 @@ function slb_get_message_html( $message, $message_type ) {
 
     return $output;
 }
+
+// 6.19
+// hint: returns false if list has no reward or returns the object containing file and title if it does
+function slb_get_list_reward( $list_id ) {
+    
+    // setup return data
+    $reward_data = false;
+
+    // get enable_reward value
+    $enable_reward = ( get_field( slb_get_acf_key('slb_enable_reward'), $list_id ) ) ? true : false;
+
+    // if reward is enabled for this list
+    if ( $enable_reward ) :
+        
+        // get reward file
+        $reward_file = ( get_field( slb_get_acf_key('slb_reward_file'), $list_id)) ? 
+            get_field( slb_get_acf_key( 'slb_reward_file'), $list_id) : false;
+
+        // get reward title
+        $reward_title = ( get_field( slb_get_acf_key('slb_reward_title'), $list_id)) ? 
+            get_field( slb_get_acf_key( 'slb_reward_title'), $list_id) : 'Reward';
+
+        
+        // if reward_file is a valid array
+        if( is_array( $reward_file )) :
+            
+            // setup return data
+            $reward_data = array(
+              'file' => $reward_file,
+              'title' => $reward_title, 
+            );
+        endif;
+        
+    endif;
+
+    // return $reward_data
+    return $reward_data;
+}
+
  
 /* !7. CUSTOM POST TYPES */
 
