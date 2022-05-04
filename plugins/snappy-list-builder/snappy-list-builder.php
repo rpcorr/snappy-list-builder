@@ -321,7 +321,7 @@ function slb_confirm_subscription_shortcode( $args, $content="" ) {
     
     else :
 
-        $output .= slb_get_messge_html( 'This link is invalid. Invalid Subscriber ' . $email . '.', 'error' );
+        $output .= slb_get_message_html( 'This link is invalid. Invalid Subscriber ' . $email . '.', 'error' );
             
     endif;
 
