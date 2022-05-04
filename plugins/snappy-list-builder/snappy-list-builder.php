@@ -25,6 +25,7 @@ Text Domain: snappy-list-builder
         1.7 - register our custom menus
         1.8 - load external files in WordPress admin
         1.9 - register plugin options
+        1.10 - register activation/deactivation/uninstall functions
         
     2. SHORTCODES
         2.1 - slb_register_shortcodes() registers all our custom shortcodes 
@@ -53,7 +54,9 @@ Text Domain: snappy-list-builder
         5.4 - slb_unsubscribe() removes one or more subscriptions from a subscriber and notifies them via email
         5.5 - slb_remove_subscription( $subscriber_id, $list_id ) removes a single subscription from a subscriber
         5.6 - slb_send_subscriber_email( $subscriber_id, $email_template_name,  $list_id ) sends a unique customize email to a subscriber
-        5.7 - slb_confirm_subscription( $subscriber_id, $list_id ) add subscription to database and emails subscriber confirmation email 
+        5.7 - slb_confirm_subscription( $subscriber_id, $list_id ) add subscription to database and emails subscriber confirmation email
+        5.8 - slb_create_plugin_tables() create custom tables for our plugin
+        5.9 - slb_activate_plugin() runs on plugin activation
    
     6. HELPERS
         6.1 - slb_subscriber_has_subscription( $subscriber_id, $list_id ) returns true or false
@@ -146,7 +149,11 @@ add_action('admin_enqueue_scripts', 'slb_admin_scripts');
 
 // 1.9
 // hint: register plugin options
-add_action( 'admin_init', 'slb_register_options');
+add_action('admin_init', 'slb_register_options');
+
+// 1.10
+// hint: register activation/deactivation/uninstall functions
+register_activation_hook(__FILE__, 'slb_activate_plugin');
 
 
 /* !2. SHORTCODES */
@@ -823,6 +830,57 @@ function slb_confirm_subscription( $subscriber_id, $list_id ) {
 
     // return result
     return $optin_complete;
+}
+
+// 5.8
+// hint: create custom tables for our plugin
+function slb_create_plugin_tables() {
+    
+    global $wpdb;
+
+    // setup return value
+    $return_value = false;
+
+    try {
+
+        $table_name = $wpdb->prefix . "slb_reward_links";
+        $charset_collate = $wpdb->get_charset_collate();
+         
+        // sql for our table creation
+        $sql = "CREATE TABLE $table_name (
+                id mediumint(11) NOT NULL AUTO_INCREMENT,
+                uid varchar(128) NOT NULL,
+                subscriber_id mediumint(11) NOT NULL,
+                list_id mediumint(11) NOT NULL,
+                attachment_id mediumint(11) NOT NULL,
+                downloads mediumint(11) DEFAULT 0 NOT NULL,
+                UNIQUE KEY id (id)
+            ) $charset_collate;";
+
+        // make sure we include WordPress functions for dbDelta
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+
+        // dbDelta will create a new table if none exists or update an existing one
+        dbDelta($sql);
+
+        // return true
+        $return_value = true;
+        
+    } catch (Exception $e ) {
+        
+        // php error
+    }
+
+    // return result
+    return $return_value;
+}
+
+// 5.9
+// hint: runs on plugin activation
+function slb_activate_plugin() {
+    
+    // setup custom database tables
+    slb_create_plugin_tables();
 }
 
 /* !6. HELPERS */
