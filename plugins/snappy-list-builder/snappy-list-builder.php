@@ -32,6 +32,7 @@ Text Domain: snappy-list-builder
         2.2 - slb_form_shortcode( $args, $content="" ) returns a html string for an email capture form
         2.3 - slb_manage_subscriptions_shortcode( $args, $content = "" ) displays a form for managing the users list subscriptions
         2.4 - slb_confirm_subscription_shortcode( $args, $content="" ) display subscription opt-in confirmation text and link message subscriptions
+        2.5 - slb_download_reward_shortcode( $args, $content = "" ) returns a message if the download link has expired or is invalid
 
     3. FILTERS
         3.1 - slb_subscriber_column_headers ( $columns ) provide custom heading labels for subscriber custom post
@@ -57,6 +58,8 @@ Text Domain: snappy-list-builder
         5.7 - slb_confirm_subscription( $subscriber_id, $list_id ) add subscription to database and emails subscriber confirmation email
         5.8 - slb_create_plugin_tables() create custom tables for our plugin
         5.9 - slb_activate_plugin() runs on plugin activation
+        5.10 - slb_add_reward_link( $uid, $subscriber_id, $list_id, $attachment_id ) add new reward links to the database
+        5.11 - slb_trigger_reward_download() triggers a download of the reward file 
    
     6. HELPERS
         6.1 - slb_subscriber_has_subscription( $subscriber_id, $list_id ) returns true or false
@@ -78,6 +81,9 @@ Text Domain: snappy-list-builder
         6.17 - slb_get_optin_link( $email, $list_id=0 ) returns a unique link for opting into an email list
         6.18 - slb_get_message_html( $message, $message_type ) returns html for message
         6.19 - slb_get_list_reward( $list_id ) returns false if list has no reward or returns the object containing file and title if it does
+        6.20 - slb_get_reward_link( $subscriber_id, $list_id ) returns a unique link for downloading a reward file
+        6.21 - slb_generate_reward_uid( $subscriber_id, $list_id) generates a unique number
+        6.22 - slb_get_reward( $uid ) return false if list has no reward or returns the object containing file and title if it does 
         
     7. CUSTOM POST TYPES
         7.1 - subscribers
@@ -155,6 +161,10 @@ add_action('admin_init', 'slb_register_options');
 // hint: register activation/deactivation/uninstall functions
 register_activation_hook(__FILE__, 'slb_activate_plugin');
 
+// 1.11
+// hint: trigger reward downloads
+add_action('wp', 'slb_trigger_reward_download');
+
 
 /* !2. SHORTCODES */
 
@@ -164,6 +174,7 @@ function slb_register_shortcodes() {
     add_shortcode( 'slb_form', 'slb_form_shortcode' );
     add_shortcode( 'slb_manage_subscriptions', 'slb_manage_subscriptions_shortcode' );
     add_shortcode( 'slb_confirm_subscription', 'slb_confirm_subscription_shortcode' );
+    add_shortcode( 'slb_download_reward', 'slb_download_reward_shortcode' );
 }
 
 // 2.2
@@ -337,6 +348,29 @@ function slb_confirm_subscription_shortcode( $args, $content="" ) {
     
     // return output html
     return $output;
+}
+
+// 2.5
+// [slb_download_reward]
+// hint: returns a message if the download link has expired or is invalid
+function slb_download_reward_shortcode( $args, $content = "" ) {
+    
+    $output = '';
+
+    $uid = ( isset($_GET['reward'])) ? (string)$_GET['reward'] : 0;
+
+    // get reward form link uid
+    $reward = slb_get_reward( $uid );
+
+    // if reward was found
+    if( $reward === false ) :
+        
+        $output .= slb_get_message_html( 'This link is invalid.', 'error');
+        
+    endif;
+
+    return $output;
+    
 }
 
 /* !3. FILTERS */
@@ -883,6 +917,78 @@ function slb_activate_plugin() {
     slb_create_plugin_tables();
 }
 
+// 5.10
+// hint: add new reward links to the database
+function slb_add_reward_link( $uid, $subscriber_id, $list_id, $attachment_id ) {
+
+    global $wpdb;
+
+    // setup our return value
+    $return_value = false;
+
+    try {
+
+        $table_name = $wpdb->prefix . "slb_reward_links";
+
+        $wpdb->insert(
+            $table_name,
+            array(
+                'uid' => $uid,
+                'subscriber_id' => $subscriber_id,
+                'list_id' => $list_id,
+                'attachment_id' => $attachment_id,
+            ),
+            array (
+                '%s',
+                '%d',
+                '%d',
+                '%d',
+            )
+        );
+
+        // return true
+        $return_value = true;
+                
+    } catch ( Exception $e ) {
+
+        // php error
+        
+    }
+
+    // return the result
+    return $return_value;
+    
+}
+
+// 5.11
+// hint: triggers a download of the reward file
+function slb_trigger_reward_download() {
+
+    global $post;
+
+    if( $post->ID == slb_get_option( 'slb_reward_page_id') && isset($_GET['reward']) ) :
+        
+        $uid = (string)$_GET['reward'];
+
+        // get reward form link uid
+        $reward = slb_get_reward( $uid );
+
+        // if reward was found
+        if( $reward !== false ) :
+
+            header("Content-type: application/".$reward['file']['mime_type'], true, 200 );
+            header("Content-Disposition: attachment; filename=".$reward['title']);
+            header("Pragma: no-cache");
+            header("Expires: 0");
+            readfile($reward['file']['url']);
+            exit();
+                
+        endif;
+        
+    endif;
+
+}
+
 /* !6. HELPERS */
 
 // 6.1
@@ -1367,8 +1473,37 @@ function slb_get_email_template( $subscriber_id, $email_template_name, $list_id 
             <br /><br />
             <hr />
             <p><a href="' . $manage_subscriptions_link .'">Click here to unsubscribe</a> from this or any other email list.</p>';
-        
-        
+            
+        // get reward
+        $reward = slb_get_list_reward( $list_id );
+
+        // setup reward text
+        $reward_text = '';       
+
+        // if reward exists
+        if( $reward !== false ) :
+
+            // setup the appropriate reward text
+            switch( $email_template_name ) {
+                
+                case 'new_subscription' :
+                    // set reward text
+                    $reward_text = '<p>After confirming your subscription, we will send you a link for a FREE DOWNLOAD of '.
+                    $reward['title'] . '</p>';
+                    break;
+                case 'subscription_confirmed' :
+                    // get download limit
+                    $download_limit = slb_get_option( 'slb_download_limit' );
+                    // generate new download link
+                    $download_link = slb_get_reward_link( $subscriber_id, $list_id );
+                    // set the reward text
+                    $reward_text = '<p>Here is your <a href="'. $download_link .'">UNIQUE DOWNLOAD LINK</a> for ' . 
+                    $reward['title'] . '</p>';
+                    break;
+            }
+            
+        endif;
+
         // setup email templates
 
             // get unique opt-in link
@@ -1381,7 +1516,7 @@ function slb_get_email_template( $subscriber_id, $email_template_name, $list_id 
                     ' . $default_email_header . '
                     <p>Thank you for subscribing to ' . $list->post_title .'!</p>
                     <p>Please <a href="' . $optin_link . '">click here to confirm your subscription.</a></p>
-                    ' . $default_email_footer . $unsubscribe_text,
+                    ' . $reward_text . $default_email_footer . $unsubscribe_text,
             );
 
             // template: subscription_confirmed
@@ -1390,7 +1525,7 @@ function slb_get_email_template( $subscriber_id, $email_template_name, $list_id 
               'body' => '
                     ' . $default_email_header . '
                     <p>Thank you for confirming your subscription. You are now subscribed to ' . $list->post_title .'!</p>
-                    ' . $default_email_footer . $unsubscribe_text,
+                    ' . $reward_text . $default_email_footer . $unsubscribe_text,
             );
                      
     endif;
@@ -1571,6 +1706,138 @@ function slb_get_list_reward( $list_id ) {
               'title' => $reward_title, 
             );
         endif;
+        
+    endif;
+
+    // return $reward_data
+    return $reward_data;
+}
+
+// 6.20
+// hint: returns a unique link for downloading a reward file
+function slb_get_reward_link( $subscriber_id, $list_id ) {
+    
+    $link_href = '';
+
+    try {
+        
+        $page = get_post(  slb_get_option( 'slb_reward_page_id' ) );
+        $slug = $page->post_name;
+        $permalink = get_permalink( $page );
+
+        // generate unique uid for reward link
+        $uid = slb_generate_reward_uid( $subscriber_id, $list_id );
+
+        // get list reward
+        $reward = slb_get_list_reward( $list_id );
+
+        // if an attachment id was returned
+        if( $uid && $reward !== false ) :
+        
+            // add reward link to database
+            $link_added = slb_add_reward_link( $uid, $subscriber_id, $list_id, $reward['file']['id'] );
+
+            // if link was added successfully
+            if( $link_added === true ) :
+                
+                // get character to start querystring
+                $startquery = slb_get_querystring_start( $permalink );
+
+                // build reward link
+                $link_href = $permalink . $startquery . 'reward=' . urldecode( $uid );
+                
+            endif;
+            
+        endif;
+        
+    } catch ( Exception $e ) {
+        
+        // $link_href = $e->getMessage();
+    }
+
+    // return reward link
+    return esc_url( $link_href );
+}
+
+// 6.21
+// hint: generates a unique number
+function slb_generate_reward_uid( $subscriber_id, $list_id ) {
+    
+    // setup our return variable
+    $uid = '';
+    
+    // get subscriber post object
+    $subscriber = get_post( $subscriber_id );
+
+    // get list post object
+    $list = get_post( $list_id );
+    
+    // if subscriber and list are valid
+    if ( slb_validate_subscriber( $subscriber ) && slb_validate_list( $list ) ) :
+        
+        // get list reward
+        $reward = slb_get_list_reward( $list_id );
+
+        // if reward is not equal to false
+        if( $reward !== false ) :
+            
+            // generate a unique id
+            $uid = uniqid( 'slb', true );
+            
+        endif;
+        
+    endif;
+
+    return $uid;
+}
+
+// 6.22
+// hint: return false if list has no reward or returns the object containing file and title if it does
+function slb_get_reward( $uid ) {
+
+    global $wpdb;
+    
+    // setup return data
+    $reward_data = false;
+
+    // reward links download table name
+    $table_name = $wpdb->prefix . "slb_reward_links";
+
+    // get list id from reward link
+    $list_id = $wpdb->get_var(
+        $wpdb->prepare(
+            "
+              SELECT list_id
+              FROM $table_name
+              WHERE uid = %s
+            ",
+            $uid
+        )
+    );
+    
+    // get downloads from reward link
+    $downloads = $wpdb->get_var(
+        $wpdb->prepare(
+            "
+              SELECT downloads
+              FROM $table_name
+              WHERE uid = %s
+            ",
+            $uid
+        )
+    );
+
+    // get reward data
+    $reward = slb_get_list_reward( $list_id );
+
+    // if reward was found
+    if( $reward !== false) :
+
+        // set reward data
+        $reward_data = $reward;
+
+        // add dowloads to reward data
+        $reward_data['downloads'] = $downloads;
         
     endif;
 
