@@ -59,7 +59,8 @@ Text Domain: snappy-list-builder
         5.8 - slb_create_plugin_tables() create custom tables for our plugin
         5.9 - slb_activate_plugin() runs on plugin activation
         5.10 - slb_add_reward_link( $uid, $subscriber_id, $list_id, $attachment_id ) add new reward links to the database
-        5.11 - slb_trigger_reward_download() triggers a download of the reward file 
+        5.11 - slb_trigger_reward_download() triggers a download of the reward file
+        5.12 - slb_upate_reward_link_downloads( $uid ) increase reward link download count by one
    
     6. HELPERS
         6.1 - slb_subscriber_has_subscription( $subscriber_id, $list_id ) returns true or false
@@ -219,9 +220,25 @@ function slb_form_shortcode( $args, $content="") {
                     $output .= '<div class="slb-content">' . wpautop($content) . '</div>'; // wpauto automattically adds paragraph tags
                 endif;
 
+                // get reward
+                $reward = slb_get_list_reward( $list_id );
+
+                // if reward exists
+                if( $reward !== false ) :
+
+                    // include message about reward
+                    $output .='
+                        <div class="slb-content slb-reward-message">
+                            <p>Get a FREE DOWNLOAD of <strong>' . $reward['title'] . '</strong> when you join this list!</p>
+                        </div>
+                    ';
+                endif;
+
                 // completing our form html
                 $output .= '<p class="slb-input-container">
+                    
                     <input type="submit" name="slb_submit" value="Sign Me Up!" /> 
+                
                 </p>
                 
             </form>
@@ -363,7 +380,15 @@ function slb_download_reward_shortcode( $args, $content = "" ) {
     $reward = slb_get_reward( $uid );
 
     // if reward was found
-    if( $reward === false ) :
+    if( $reward !== false) :
+        
+        if( $reward['downloads'] >= slb_get_option( 'slb_download_limit' ) ) :
+
+            $output .= slb_get_message_html( 'This link has reached it\'s download limit.', 'warning');
+        
+        endif;
+        
+    else :
         
         $output .= slb_get_message_html( 'This link is invalid.', 'error');
         
@@ -968,13 +993,15 @@ function slb_trigger_reward_download() {
 
     if( $post->ID == slb_get_option( 'slb_reward_page_id') && isset($_GET['reward']) ) :
         
-        $uid = (string)$_GET['reward'];
+        $uid = ( $_GET['reward']) ? (string)$_GET['reward'] : 0;
 
         // get reward form link uid
         $reward = slb_get_reward( $uid );
 
         // if reward was found
-        if( $reward !== false ) :
+        if( $reward !== false && $reward['downloads'] < slb_get_option( 'slb_download_limit') ) :
+
+            slb_upate_reward_link_downloads( $uid );
 
             header("Content-type: application/".$reward['file']['mime_type'], true, 200 );
             header("Content-Disposition: attachment; filename=".$reward['title']);
@@ -986,7 +1013,56 @@ function slb_trigger_reward_download() {
         endif;
         
     endif;
+}
 
+// 5.12
+// hint: increase reward link download count by one
+function slb_upate_reward_link_downloads( $uid ) {
+    
+    global $wpdb;
+
+    // setup our return value
+    $return_value = false;
+
+    try {
+
+        $table_name = $wpdb->prefix. "slb_reward_links";
+
+        // get current download count
+        $current_count = $wpdb->get_var(
+            $wpdb->prepare(
+                "
+                    SELECT downloads
+                    FROM $table_name
+                    WHERE uid = %s
+                ",
+                $uid
+            )
+        );
+
+        // set new count
+        $new_count = (int)$current_count + 1;
+        
+        // update downloads for this reward link entry
+        $wpdb->query(
+            $wpdb->prepare(
+                "
+                  UPDATE $table_name
+                  SET downloads = $new_count
+                  WHERE uid = %s
+                ",
+                $uid
+            ) 
+        );
+
+        $return_value = true;
+
+    } catch ( Exception $e ) {
+        
+        // php error
+    }
+
+    return $return_value;
 }
 
 /* !6. HELPERS */
@@ -1489,7 +1565,7 @@ function slb_get_email_template( $subscriber_id, $email_template_name, $list_id 
                 case 'new_subscription' :
                     // set reward text
                     $reward_text = '<p>After confirming your subscription, we will send you a link for a FREE DOWNLOAD of '.
-                    $reward['title'] . '</p>';
+                    $reward['title'] . '.</p>';
                     break;
                 case 'subscription_confirmed' :
                     // get download limit
@@ -1498,7 +1574,7 @@ function slb_get_email_template( $subscriber_id, $email_template_name, $list_id 
                     $download_link = slb_get_reward_link( $subscriber_id, $list_id );
                     // set the reward text
                     $reward_text = '<p>Here is your <a href="'. $download_link .'">UNIQUE DOWNLOAD LINK</a> for ' . 
-                    $reward['title'] . '</p>';
+                    $reward['title'] . '. This link will expire after '. $download_limit  .' downloads.</p>';
                     break;
             }
             
