@@ -2165,17 +2165,101 @@ function slb_dashboard_admin_page() {
 // 8.2 
 // hint: import subscribers admin page
 function slb_import_admin_page() {
-   
-    $output = '
-        <div class="wrap">
+
+    // enqueue special scripts required for our file import field
+    wp_enqueue_media();
+
+    echo ('
         
+        <div class="wrap" id="import_subscribers">
+            
             <h2>Import Subscribers</h2>
 
-            <p>Page description... </p>
-        </div>
-    ';
+            <form id="import_form_1">
+            
+                <table class="form-table">
+                
+                    <tbody>
+                    
+                        <tr>
+                            <th scope="row"><label for="slb_import_file">Import CSV</label></th>
+                            <td>
 
-    echo $output;
+                                <div class="wp-uploader">
+                                    <input type="text" name="slb_import_file_url" class="file-url regular-text" accept="csv">
+                                    <input type="hidden" name="slb_import_file_id" class="file-id" value="0">
+                                    <input type="button" name="upload-btn" class="upload-btn button-secondary" value="Upload">
+                                </div>
+                                
+                                <p class="description" id="slb_import_file-description">This is the page where Snappy List
+                                Builder will send subscribers to manage their subscriptions. <br/>
+                                IMPORTANT: In order to work, the page you select must contain the shortcode:
+                                <strong>[slb_manage_subscriptions]</strong>.</p>
+                            </td>
+                        </tr>
+                        
+                    </tbody>
+                    
+                </table>
+                
+            </form>
+
+            <form id="import_form_2">
+            
+                <table class="form-table">
+                
+                    <tbody class="slb-dynamic-content">
+                    
+                    </tbody>
+
+                    <tbody class="form-table show-only-on-valid" style="display: none">
+
+                        <tr>
+                            <th scope="row"><label>Import To List</label></th>
+                            <td>
+                                <select name="slb_import_list_id">');
+
+                                    // get all our email lists
+                                    $lists = get_posts(
+                                        array(
+                                            'post_type'     => 'slb_list',
+                                            'status'        => 'publish',
+                                            'post_per_page' => -1,
+                                            'orderby'       => 'post_title',
+                                            'order'         => 'ASC',        
+                                        )
+                                    );
+
+                                    // loop over each email list
+                                    foreach( $lists as &$list ):
+                                    
+                                        // create the select option for that list
+                                        $option = '
+                                            <option value="' . $list->ID . '">
+                                            ' . $list->post_title . '
+                                            </option>';
+
+                                        // echo the new option
+                                        echo $option;
+                                            
+                                    endforeach;
+                                
+                                
+                                echo(' </select>
+                                <p class="description"></p>
+                            </td>
+                        </tr>
+                    
+                    </tbody>
+                
+                </table>
+
+                <p class="submit show-only-on-valid" style="display:none"><input type="submit" name="submit" id="submit" class="button button-primary" value="Import"></p>
+                
+            </form>
+            
+        </div>
+    ');
 }
 
 // 8.3 
