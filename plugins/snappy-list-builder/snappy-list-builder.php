@@ -87,6 +87,8 @@ Text Domain: snappy-list-builder
         6.21 - slb_generate_reward_uid( $subscriber_id, $list_id) generates a unique number
         6.22 - slb_get_reward( $uid ) return false if list has no reward or returns the object containing file and title if it does
         6.23 - slb_get_list_subscribers( $list_id = 0) returns an array of subscriber_id's
+        6.24 - slb_get_list_subscriber_count( $list_id=0 ) returns the amount of subscribers in the list
+        6.25 - slb_get_export_link( $list_id=0 ) returns a unique link for downloading a subscribers csv
         
     7. CUSTOM POST TYPES
         7.1 - subscribers
@@ -486,6 +488,7 @@ function slb_list_column_headers ( $columns ) {
         'cb' => '<input type="checkbox" />',
         'title' => __('List Name'),
         'reward' => __('Opt-in Reward'),
+        'subscribers' => __('Subscribers'),
         'shortcode' => __('Shortcode'),
     );
 
@@ -508,6 +511,16 @@ function slb_list_column_data ( $column, $post_id ) {
             if( $reward !== false ) :                
                 $output .= '<a href="' . $reward['file']['url'] . '" download="' . $reward['title'] . '">' . $reward['title'] .'</a>';
             endif;
+            break;
+        case 'subscribers' :
+            // get the count of current subscribers
+            $subscriber_count = slb_get_list_subscriber_count( $post_id );
+            // get our unique export link
+            $export_href = slb_get_export_link( $post_id );
+            // append the subscriber count to output
+            $output .= $subscriber_count;
+            // if there are more than one subscriber, add new export link to $output
+            if ( $subscriber_count ) $output .= ' <a href="' . $export_href . '">Export</a>';
             break;
         case 'shortcode' :
             $output .= '[slb_form id="' . $post_id . '"]';
@@ -2062,7 +2075,7 @@ function slb_get_list_subscribers( $list_id = 0) {
         while ( $subscribers_query->have_posts() ):
 
             // get the post object
-            $subscribers_query-the_post();
+            $subscribers_query->the_post();
 
             $post_id = get_the_ID();
 
@@ -2078,6 +2091,39 @@ function slb_get_list_subscribers( $list_id = 0) {
     wp_reset_postdata();
 
     return $subscribers;
+}
+
+// 6.24
+// hint: returns the amount of subscribers in the list
+function slb_get_list_subscriber_count( $list_id=0 ) {
+    
+    // setup return variable
+    $count = 0;
+
+    // get array of subscribers ids
+    $subscribers = slb_get_list_subscribers( $list_id );
+
+    // if array was returned
+    if ( $subscribers !== false ) :
+
+        // update count
+        $count = count( $subscribers );
+
+    endif;
+    
+    // return result
+    return $count;
+}
+
+// 6.25
+// hint: returns a unique link for downloading a subscribers csv
+function slb_get_export_link( $list_id=0 ) {
+    
+    $link_href = 'admin-ajax.php?action=slb_download_subscribers_csv&list_id=' . $list_id;
+
+    // return unique download link
+    return esc_url($link_href);
+    
 }
 
  
@@ -2098,6 +2144,9 @@ include_once( plugin_dir_path( __FILE__ ) . 'cpt/slb_list.php');
 // hint: dashboard admin page
 function slb_dashboard_admin_page() {
 
+    // get our export link
+    $export_href = slb_get_export_link();
+
     $output = '
         <div class="wrap">
 
@@ -2105,6 +2154,8 @@ function slb_dashboard_admin_page() {
 
             <p>The ultimate email list building plugin for WordPress. Capture new subscribers. Reward subscribers with a custom
     download upon opt-in. Build unlimited lists. Import and export subscribers easily with .csv</p>
+
+            <p><a href="' . $export_href . '" class="button button-primary">Export All Subscriber Data</a></p>
 
         </div>';
 
