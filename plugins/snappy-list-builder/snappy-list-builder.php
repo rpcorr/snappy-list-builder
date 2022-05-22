@@ -1092,7 +1092,7 @@ function slb_download_subscribers_csv() {
         $now = new DateTime();
         
         // setup a unique filename for the generated export file
-        $fn1 = 'snappy-list-builder-export-list-id-' . $list_id . '-date-' . $now->format('Ymd') . 'csv';
+        $fn1 = 'snappy-list-builder-export-list-id-' . $list_id . '-date-' . $now->format('Ymd') . '.csv';
         $fn2 = plugin_dir_path( __FILE__ ) . 'exports/' . $fn1;
 
         // open new file in write mode
