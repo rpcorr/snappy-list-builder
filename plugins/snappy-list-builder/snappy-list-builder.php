@@ -61,6 +61,7 @@ Text Domain: snappy-list-builder
         5.10 - slb_add_reward_link( $uid, $subscriber_id, $list_id, $attachment_id ) add new reward links to the database
         5.11 - slb_trigger_reward_download() triggers a download of the reward file
         5.12 - slb_upate_reward_link_downloads( $uid ) increase reward link download count by one
+        5.13 - slb_download_subscribers_csv() generates a .csv file of subscribers data expects $_GET['list_id'] to be set in the URL
    
     6. HELPERS
         6.1 - slb_subscriber_has_subscription( $subscriber_id, $list_id ) returns true or false
@@ -84,7 +85,8 @@ Text Domain: snappy-list-builder
         6.19 - slb_get_list_reward( $list_id ) returns false if list has no reward or returns the object containing file and title if it does
         6.20 - slb_get_reward_link( $subscriber_id, $list_id ) returns a unique link for downloading a reward file
         6.21 - slb_generate_reward_uid( $subscriber_id, $list_id) generates a unique number
-        6.22 - slb_get_reward( $uid ) return false if list has no reward or returns the object containing file and title if it does 
+        6.22 - slb_get_reward( $uid ) return false if list has no reward or returns the object containing file and title if it does
+        6.23 - slb_get_list_subscribers( $list_id = 0) returns an array of subscriber_id's
         
     7. CUSTOM POST TYPES
         7.1 - subscribers
@@ -127,6 +129,7 @@ add_action('wp_ajax_nopriv_slb_save_subscription', 'slb_save_subscription'); // 
 add_action('wp_ajax_slb_save_subscription', 'slb_save_subscription'); // admin user
 add_action('wp_ajax_nopriv_slb_unsubscribe', 'slb_unsubscribe'); // regular website vistor
 add_action('wp_ajax_slb_unsubscribe', 'slb_unsubscribe'); // admin user
+add_action('wp_ajax_slb_download_subscribers_csv', 'slb_download_subscribers_csv'); // admin user
 
 // 1.5
 // hint: load external files to public website
@@ -1065,6 +1068,88 @@ function slb_upate_reward_link_downloads( $uid ) {
     return $return_value;
 }
 
+// 5.13
+// hint: generates a .csv file of subscribers data
+// expects $_GET['list_id'] to be set in the URL
+function slb_download_subscribers_csv() {
+    
+    // get the list id from the URL scope
+    $list_id = ( isset($_GET['list_id']) ) ? (int)$_GET['list_id'] : 0;
+
+    // set up our return value
+    $csv = '';
+
+    // get the list object
+    $list = get_post( $list_id );
+    
+    // get the list's subscribers or get all subscribers if no list id is given
+    $subscribers = slb_get_list_subscribers( $list_id );
+
+    // if we have confirm subscribers
+    if( $subscribers !== false ) :
+        
+        // get the current date
+        $now = new DateTime();
+        
+        // setup a unique filename for the generated export file
+        $fn1 = 'snappy-list-builder-export-list-id-' . $list_id . '-date-' . $now->format('Ymd') . 'csv';
+        $fn2 = plugin_dir_path( __FILE__ ) . 'exports/' . $fn1;
+
+        // open new file in write mode
+        $fp = fopen( $fn2, 'w' );
+        
+        // get the first subscriber's data
+        $subscriber_data = slb_get_subscriber_data( $subscribers[0] );
+
+        // remove the subscriptions and name column from the data
+        unset( $subscriber_data['subscriptions']);
+        unset( $subscriber_data['name']);
+
+        // build our csv headers array from $subscriber_data's data keys
+        $csv_headers = array();
+        foreach( $subscriber_data as $key => $value ) :
+            array_push( $csv_headers, $key);
+        endforeach;
+
+        // append $csv_headers to our csv file
+        fputcsv( $fp, $csv_headers );
+
+        // loop over all our subscribers
+        foreach( $subscribers as &$subscriber_id) :
+
+            // get the subscriber data of the current subscriber
+            $subscriber_data = slb_get_subscriber_data( $subscriber_id );
+
+            // remove the subscriptions and name column from the data
+            unset( $subscriber_data['subscriptions']);
+            unset( $subscriber_data['name']);
+
+            // append $csv_headers to our csv file
+            fputcsv( $fp, $subscriber_data );
+                        
+        endforeach;
+
+        // read open our new file is read mode
+        $fp = fopen($fn2, 'r');
+        //read our new csv file and store it's content in $fc
+        $fc = fread( $fp, filesize( $fn2 ) );
+        // close our open pointer
+        fclose( $fp );
+        
+        // setup file headers
+        header("Content-type: application/csv");
+        header("Content-Disposition: attachment; filename=" . $fn1);
+        // echo the contents of our file and return it to the browser
+        echo( $fc );
+        // exit PHP process
+        exit;
+        
+    endif;
+
+    // return false if we were unable to download our csv
+    return false;
+}
+
 /* !6. HELPERS */
 
 // 6.1
@@ -1919,6 +2004,80 @@ function slb_get_reward( $uid ) {
 
     // return $reward_data
     return $reward_data;
+}
+
+// 6.23
+// hint: returns an array of subscriber_id's
+function slb_get_list_subscribers( $list_id = 0) {
+    
+    // setup return variable
+    $subscribers = false;
+
+    // get list object
+    $list = get_post( $list_id );
+    
+    if( slb_validate_list( $list ) ) :
+        
+        // query all subscribers from post this list only
+        $subscribers_query = new WP_QUERY(
+          array(
+              'post_type' => 'slb_subscriber',
+              'published' => true,
+              'posts_per_page' => -1,
+              'orderby' => 'post_date',
+              'order' => 'DESC',
+              'status' => 'publish',
+              'meta_query' => array(
+                  array(
+                      'key' => 'slb_subscriptions',
+                      'value' => ':"' . $list->ID. '"',
+                      'compare' => 'LIKE'
+                  )
+              )
+          )  
+        );
+        
+    elseif ( $list_id == 0) :
+
+        // query all subscribers from all lists
+        $subscribers_query = new WP_QUERY(
+          array(
+              'post_type' => 'slb_subscriber',
+              'published' => true,
+              'posts_per_page' => -1,
+              'orderby' => 'post_date',
+              'order' => 'DESC',
+          )  
+        );
+    
+    endif;
+
+    // if $subscriber_query isset and query returns results
+    if ( isset( $subscribers_query) && $subscribers_query->have_posts() ) :
+
+        // set subscriber array
+        $subscribers = array();
+
+        // loop over results
+        while ( $subscribers_query->have_posts() ):
+
+            // get the post object
+            $subscribers_query-the_post();
+
+            $post_id = get_the_ID();
+
+            // append result to subscribers array
+            array_push( $subscribers, $post_id );
+            
+        endwhile;
+        
+    endif;
+
+    // reset wp query/postdata
+    wp_reset_query();
+    wp_reset_postdata();
+
+    return $subscribers;
 }
 
  
