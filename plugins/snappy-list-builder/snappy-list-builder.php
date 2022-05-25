@@ -62,7 +62,8 @@ Text Domain: snappy-list-builder
         5.11 - slb_trigger_reward_download() triggers a download of the reward file
         5.12 - slb_upate_reward_link_downloads( $uid ) increase reward link download count by one
         5.13 - slb_download_subscribers_csv() generates a .csv file of subscribers data expects $_GET['list_id'] to be set in the URL
-   
+        5.14 - slb_parse_import_csv() this function retrieves a csv file from the server and parse data into a php array; it then returns that array in a json formatted object
+        
     6. HELPERS
         6.1 - slb_subscriber_has_subscription( $subscriber_id, $list_id ) returns true or false
         6.2 - slb_get_subscriber_id( $email ) retrieves a subscriber_id from an email address
@@ -89,6 +90,7 @@ Text Domain: snappy-list-builder
         6.23 - slb_get_list_subscribers( $list_id = 0) returns an array of subscriber_id's
         6.24 - slb_get_list_subscriber_count( $list_id=0 ) returns the amount of subscribers in the list
         6.25 - slb_get_export_link( $list_id=0 ) returns a unique link for downloading a subscribers csv
+        6.26 - slb_csv_to_array( $filename, ',')
         
     7. CUSTOM POST TYPES
         7.1 - subscribers
@@ -132,6 +134,7 @@ add_action('wp_ajax_slb_save_subscription', 'slb_save_subscription'); // admin u
 add_action('wp_ajax_nopriv_slb_unsubscribe', 'slb_unsubscribe'); // regular website vistor
 add_action('wp_ajax_slb_unsubscribe', 'slb_unsubscribe'); // admin user
 add_action('wp_ajax_slb_download_subscribers_csv', 'slb_download_subscribers_csv'); // admin user
+add_action('wp_ajax_slb_parse_import_csv','slb_parse_import_csv'); // admin user
 
 // 1.5
 // hint: load external files to public website
@@ -1163,6 +1166,64 @@ function slb_download_subscribers_csv() {
     return false;
 }
 
+// 5.14
+// hint: this function retrieves a csv file from the server and parse data into a php array
+// it then returns that array in a json formatted object
+// this function is a ajax post form handler
+// expects: $_POST['slb_import_file_id]
+function slb_parse_import_csv() {
+    
+    // setup our return array
+    $result = array(
+      'status' => 0,
+      'message' => 'Could not parse import CSV. ',
+      'error' => '',
+      'data' => array(),  
+    );
+
+    try {
+        
+        // get the attachment id from $_POST['slb_import_file_id']
+        $attachment_id = (isset($_POST['slb_import_file_id'])) ? esc_attr( $_POST['slb_import_file_id'] ) : 0;
+
+        // get the filename using wp's get_attached_file
+        $filename = get_attached_file( $attachment_id );
+
+        // if we got the filename
+        if( $filename !== false ) :
+
+            // parse the csv file into a php array using slb_csv_to_array
+            $csv_data = slb_csv_to_array( $filename, ',');
+
+            // if we were able to parse the file and there's data in it
+            if( $csv_data !== false && count( $csv_data ) ) :
+
+                // append the data to our result array and return as success
+                $result = array(
+                    'status' => 1,
+                    'message' => 'CSV Import data parsed successfully',
+                    'error' => '',
+                    'data' => $csv_data,
+                );
+
+            endif;
+
+        else :
+            
+            // return an error message if we could not retrieve the file
+            $result['error'] = 'The import file does not exists. ';
+            
+        endif;
+
+    } catch ( Exception $e) {
+        
+        // php error
+    }
+
+    // return the result as json
+    slb_return_json( $result );
+}
+
 /* !6. HELPERS */
 
 // 6.1
@@ -2124,9 +2185,57 @@ function slb_get_export_link( $list_id=0 ) {
     // return unique download link
     return esc_url($link_href);
     
+} 
+
+// 6.26
+// hint:
+function slb_csv_to_array( $filename='', $delimiter=',') {
+
+    // this is an important setting!
+    ini_set( 'auto_detect_line_endings', true );
+
+    // if the file doesn't exist or the file is not readable return false
+    if( !file_exists( $filename ) || !is_readable( $filename ))
+        return FALSE;
+
+    // setup our return data
+    $return_data = array();
+    
+    // if we can open and read the file
+    if (($handle = fopen($filename, "r")) !== FALSE ) {
+        
+        $row = 0;
+
+        // while data exists loop over data
+        while (($data = fgetcsv($handle, 1000, ",")) !== FALSE ) {
+            // count the number of items in this data
+            $num = count($data);
+            // increment our row variable
+            $row++;
+            // setup our row data array
+            $row_data = array();
+            // loop over all items and append them to our row data
+            for ($c=0; $c < $num; $c++) {
+                // if this is the first row set it up as our header
+                if( $row == 1) :
+                    $header[] = $data[$c];
+                else :
+                    // all rows greater than 1
+                    // add row data item
+                    $return_data[$row-2][$header[$c]] = $data[$c];
+                endif;
+            }
+        }
+
+        // close our file
+        fclose($handle);
+    }
+
+    // return the new data as a php array
+    return $return_data;
 }
 
- 
+
 /* !7. CUSTOM POST TYPES */
 
 // 7.1 
