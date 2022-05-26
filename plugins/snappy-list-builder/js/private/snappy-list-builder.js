@@ -78,9 +78,7 @@ jQuery(document).ready(function($){
     $import_form_2 = $('#import_form_2','#import_subscribers');
 
     // this event triggered when import_form_1 file is selected
-    $('.file-id',$import_form_1).bind('change',function(){
-
-        alert( 'a csv file has been added successfully' );
+    $('.file-id',$import_form_1).bind('change',function() {
 
         // get the form data and serialize it
         var form_1_data = $import_form_1.serialize();
@@ -154,12 +152,12 @@ jQuery(document).ready(function($){
         if( checked ) {
 
             // trigger click on all inputs not checked
-            $('[name="slb_import_rows"]:not(:checked)',$import_form_2).trigger('click');
+            $('[name="slb_import_rows[]"]:not(:checked)',$import_form_2).trigger('click');
 
         } else {
 
             // trigger click on all inputs checked
-            $('[name="slb_import_rows"]:checked',$import_form_2).trigger('click'); 
+            $('[name="slb_import_rows[]"]:checked',$import_form_2).trigger('click'); 
         }
     });
     */
@@ -171,6 +169,60 @@ jQuery(document).ready(function($){
         } else {
             $('.show-only-on-valid', $import_form_2).hide();
         }
+    });
+
+    // hint: this is our ajax form handler for our import subscribers form #2
+    $(document).on('submit', '#import_subscribers #import_form_2', function() {
+
+        // set up form 2 action url
+        var form_2_action_url = wpajax_url + '?action=slb_import_subscribers';
+
+        // serialize form data
+        var form_2_data = $import_form_2.serialize();
+
+        // post the form to our php action for processing ...
+        $.ajax({
+            url: form_2_action_url,
+            method: 'post',
+            dataType: 'json',
+            data: form_2_data,
+            success: function( response ) {
+
+                if( response.status == 1 ) {
+
+                    // success!
+
+                    // reset our import form
+                    $('.slb-dynamic-content').html('');
+                    $('.show-only-on-valid', $import_form_2).hide();
+                    $('.file-url', $import_form_1).val('');
+                    $('.file-id', $import_form_1).val(0);
+
+                    // return the good news ...
+                    alert( response.message );
+
+                } else {
+
+                    // error
+                    // begin building our error message text
+                    var msg = response.message + '\r' + response.error + '\r';
+                    // loop over the errors
+                    $.each( response.errors, function(key, value) {
+                        // append each error on a new line
+                        msg += '\r';
+                        msg += '- ' + value;
+                    });
+
+                    // return the bad news ...
+                    alert( msg );
+
+                }
+            }
+        });
+
+        // stop our form from submitting normally
+        return false;
+        
     });
 
     // hint: this function returns custom html for import form #2
@@ -234,7 +286,7 @@ jQuery(document).ready(function($){
             var tr = '<tr>';
 
             // add our first table cell
-            var th = '<th scope="row" class="check-column"><input type="checkbox" id="cb-select-' + row_id + '" name="slb_import_rows" class="slb-input" value="' + row_id + '" /></th>';
+            var th = '<th scope="row" class="check-column"><input type="checkbox" id="cb-select-' + row_id + '" name="slb_import_rows[]" class="slb-input" value="' + row_id + '" /></th>';
 
             tr += th;
 
@@ -341,7 +393,7 @@ jQuery(document).ready(function($){
         var is_valid = true;
 
         // check if no subscribers are selected
-        if( $('[name="slb_import_rows"]:checked', $import_form_2).length == 0 ) 
+        if( $('[name="slb_import_rows[]"]:checked', $import_form_2).length == 0 ) 
             is_valid = false;
     
         // check if no fname column is selected

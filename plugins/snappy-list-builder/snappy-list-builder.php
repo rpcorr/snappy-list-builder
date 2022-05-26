@@ -63,6 +63,7 @@ Text Domain: snappy-list-builder
         5.12 - slb_upate_reward_link_downloads( $uid ) increase reward link download count by one
         5.13 - slb_download_subscribers_csv() generates a .csv file of subscribers data expects $_GET['list_id'] to be set in the URL
         5.14 - slb_parse_import_csv() this function retrieves a csv file from the server and parse data into a php array; it then returns that array in a json formatted object
+        5.15 - slb_import_subscribers() imports new subscribers from our import admin page; this function is a form handler and expects subscriber data in the $_POST scope
         
     6. HELPERS
         6.1 - slb_subscriber_has_subscription( $subscriber_id, $list_id ) returns true or false
@@ -135,6 +136,7 @@ add_action('wp_ajax_nopriv_slb_unsubscribe', 'slb_unsubscribe'); // regular webs
 add_action('wp_ajax_slb_unsubscribe', 'slb_unsubscribe'); // admin user
 add_action('wp_ajax_slb_download_subscribers_csv', 'slb_download_subscribers_csv'); // admin user
 add_action('wp_ajax_slb_parse_import_csv','slb_parse_import_csv'); // admin user
+add_action('wp_ajax_slb_import_subscribers', 'slb_import_subscribers'); // admin user
 
 // 1.5
 // hint: load external files to public website
@@ -1224,6 +1226,103 @@ function slb_parse_import_csv() {
     slb_return_json( $result );
 }
 
+// 5.15
+// hint: imports new subscribers from our import admin page
+// this function is a form handler and expects subscriber data in the $_POST scope
+function slb_import_subscribers() {
+    
+    // setup our return array
+    $result = array(
+      'status' => 0,
+      'message' => 'Could not import subscribers.',
+      'error' => '',
+      'errors' => array(),  
+    );
+
+    try {
+
+        // get the assignment values
+        $fname_column = (isset($_POST['slb_fname_column'])) ? (int)$_POST['slb_fname_column'] : 0;
+        $lname_column = (isset($_POST['slb_lname_column'])) ? (int)$_POST['slb_lname_column'] : 0;
+        $email_column = (isset($_POST['slb_email_column'])) ? (int)$_POST['slb_email_column'] : 0;
+
+        // get the list id to import to
+        $list_id = (isset($_POST['slb_import_list_id'])) ? (int)$_POST['slb_import_list_id'] : 0;
+
+        // get the selected subscriber rows to import
+        $selected_rows = (isset($_POST['slb_import_rows'])) ? (array)$_POST['slb_import_rows'] : array();
+
+        // setup the data for selected rows
+        $subscribers = array();
+
+        // setup a variable for counting the subscribers we add
+        $added_count = 0;
+
+        // loop over selected rows and get the data
+        foreach( $selected_rows as &$row_id ) :
+
+            // build our subscriber data
+            $subscriber_data = array(
+                'fname' => (string)$_POST['s_' . $row_id . '_' . $fname_column],
+                'lname' => (string)$_POST['s_' . $row_id . '_' . $lname_column],
+                'email' => (string)$_POST['s_' . $row_id . '_' . $email_column],
+            );
+
+            // if the subscriber email is invalid
+            if( !is_email( $subscriber_data['email']) ) :
+            
+                // don't attempt to add the subscriber if the email is not valid
+                $result['errors'][] = 'Invalid email detected: ' . $subscriber_data['email'] . '. This subscriber was not added';
+
+            else:
+                
+                // if subscriber email is valid ...
+                // add subscriber to the database
+                $subscriber_id = slb_save_subscriber( $subscriber_data );
+                
+                // if subscriber was created or updated successfully
+                if( $subscriber_id ) :
+                    
+                    // add subscription for this subscriber without opt-in
+                    $subscription_added = slb_add_subscription( $subscriber_id, $list_id );
+
+                    // updated our added count
+                    $added_count++;
+                    
+                endif;
+                
+            endif;
+            
+        endforeach;
+
+        // if no subscribers were actually added ...
+        if ( $added_count == 0 ) :
+        
+            // return error message
+            $result['error'] = 'No subscribers were imported.';
+
+        else :
+            
+            // if subscribers were added ...
+            // return success!
+            $result = array(
+                'status' => 1,
+                'message' => $added_count . ' subscribers imported successfully. ',
+                'error' => '',
+                'errors' => array(),
+            );
+            
+        endif;
+    
+    } catch (Exception $e) {
+        
+        // php error
+    }
+
+    // return result as json
+    slb_return_json( $result );
+} 
+
 /* !6. HELPERS */
 
 // 6.1
@@ -2300,10 +2399,8 @@ function slb_import_admin_page() {
                                     <input type="button" name="upload-btn" class="upload-btn button-secondary" value="Upload">
                                 </div>
                                 
-                                <p class="description" id="slb_import_file-description">This is the page where Snappy List
-                                Builder will send subscribers to manage their subscriptions. <br/>
-                                IMPORTANT: In order to work, the page you select must contain the shortcode:
-                                <strong>[slb_manage_subscriptions]</strong>.</p>
+                                <p class="description" id="slb_import_file-description">Expects a CSV file containing a 
+                                "Name" (First, Last, or Full) and "Email Address".</p>
                             </td>
                         </tr>
                         
@@ -2313,7 +2410,7 @@ function slb_import_admin_page() {
                 
             </form>
 
-            <form id="import_form_2">
+            <form id="import_form_2" method="post" action="/wp-admin/admin-ajax.php?action=slb_import_subscribers">
             
                 <table class="form-table">
                 
