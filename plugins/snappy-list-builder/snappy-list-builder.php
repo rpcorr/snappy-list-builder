@@ -26,6 +26,7 @@ Text Domain: snappy-list-builder
         1.8 - load external files in WordPress admin
         1.9 - register plugin options
         1.10 - register activation/deactivation/uninstall functions
+        1.11 - register trigger reward downloads
         
     2. SHORTCODES
         2.1 - slb_register_shortcodes() registers all our custom shortcodes 
@@ -65,6 +66,10 @@ Text Domain: snappy-list-builder
         5.14 - slb_parse_import_csv() this function retrieves a csv file from the server and parse data into a php array; it then returns that array in a json formatted object
         5.15 - slb_import_subscribers() imports new subscribers from our import admin page; this function is a form handler and expects subscriber data in the $_POST scope
         5.16 - slb_check_wp_version() checks the current version of WordPress and displays a message in the plugin page if the version is untested
+        5.17 - slb_uninstall_plugin() run functions for plugin uninstall
+        5.18 - slb_remove_plugin_tables() removes our custom database tables
+        5.19 - slb_remove_post_data() removes plugin related custom post type data
+        5.20 - slb_remove_options() removes any custom options from the database
         
     6. HELPERS
         6.1 - slb_subscriber_has_subscription( $subscriber_id, $list_id ) returns true or false
@@ -93,7 +98,8 @@ Text Domain: snappy-list-builder
         6.24 - slb_get_list_subscriber_count( $list_id=0 ) returns the amount of subscribers in the list
         6.25 - slb_get_export_link( $list_id=0 ) returns a unique link for downloading a subscribers csv
         6.26 - slb_csv_to_array( $filename, ',') converts csv file into an array
-        6.27 - slb_get_admin_notice( $message, $class) returns html formatted for WP admin notices 
+        6.27 - slb_get_admin_notice( $message, $class) returns html formatted for WP admin notices
+        6.28 - slb_get_options_settings() get's an array of plugin option data (group and settings) so as to save it all in one place 
         
     7. CUSTOM POST TYPES
         7.1 - subscribers
@@ -174,6 +180,7 @@ add_action('admin_init', 'slb_register_options');
 // hint: register activation/deactivation/uninstall functions
 register_activation_hook(__FILE__, 'slb_activate_plugin');
 add_action( 'admin_notices', 'slb_check_wp_version');
+register_uninstall_hook(__FILE__, 'slb_uninstall_plugin');
 
 // 1.11
 // hint: trigger reward downloads
@@ -1364,6 +1371,131 @@ function slb_check_wp_version() {
     endif;
 }
 
+// 5.17
+// hint: run functions for plugin uninstall
+function slb_uninstall_plugin() {
+    
+    // remove our custom plugin tables
+    slb_remove_plugin_tables();
+    // remove custom post types posts and data
+    slb_remove_post_data();
+    // remove plugin options
+    slb_remove_options();    
+}
+
+// 5.18
+// hint: removes our custom database tables
+function slb_remove_plugin_tables() {
+    
+    // get WP'wpdb class
+    global $wpdb;
+
+    // setup return variable
+    $tables_removed = false;
+
+    try {
+        
+        // get our custom table name
+        $table_name = $wpdb->prefix . "slb_reward_links";
+
+        // delete table from database
+        $tables_removed = $wpdb->query("DROP TABLE IF EXISTS $table_name;");
+        
+    } catch ( Exception $e ) {
+        // PHP error
+    }
+
+    // return result
+    return $tables_removed;
+}
+
+// 5.19
+// hint: removes plugin related custom post type post data
+function slb_remove_post_data() {
+
+    // get WP's wpdb class
+    global $wpdb;
+    
+    // setup our return variable
+    $data_removed = false;
+
+    try {
+        
+        // get our custom table name
+        $table_name = $wpdb->prefix . "posts";
+        
+        // set up custom post types array
+        $custom_post_types = array(
+          'slb_subscriber',
+          'slb_list'  
+        );
+
+        // remove data from the posts db table where post types are equal to our custom post types
+        $data_removed = $wpdb->query(
+            $wpdb->prepare(
+                "
+                    DELETE FROM $table_name
+                    WHERE post_type = %s OR post_type = %s
+                ",
+                $custom_post_types[0],
+                $custom_post_types[1]
+            )
+        );
+
+        // get our custom table name
+        $table_name_1 = $wpdb->prefix . "_postmeta";
+        $table_name_2 = $wpdb->prefix . "_posts"; 
+
+        // delete orphaned meta data
+        $wpdb->query(
+            $wpdb->prepare(
+                "
+                DELETE pm
+                FROM $table_name_1 pm
+                LEFT JOIN $table_name_2 wp ON wp.ID = pm.post_id
+                WHERE wp.ID IS NULL
+                "
+            )
+        );
+        
+    } catch ( Exception $e ) {
+        // PHP error
+    }
+
+    // return result
+    return $data_removed;    
+}
+
+// 5.20
+// hint: removes any custom options from the database
+function slb_remove_options() {
+    
+    // setup our return variable
+    $options_removed = false;
+
+    try {
+        
+        // get plugin option settings
+        $options = slb_get_options_settings();
+
+        // loop over all the settings
+        foreach ( $options['settings'] as &$setting ):
+
+            // unregister the setting
+            unregister_setting( $options['group'], $setting );
+            
+        endforeach;
+
+        $options_removed = true;
+        
+    } catch ( Exception $e ) {
+        // PHP error
+    }
+
+    // return result
+    return $options_removed;
+}
+
 /* !6. HELPERS */
 
 // 6.1
@@ -2400,6 +2532,26 @@ function slb_get_admin_notice( $message, $class) {
     return $output;
 }
 
+// 6.28
+// hint: get's an array of plugin option data (group and settings) so as to save it all in one place
+function slb_get_options_settings() {
+    
+    // setup our return data
+    $settings = array(
+        'group' => 'slb_plugin_options',
+        'settings' => array(
+            'slb_manage_subscription_page_id',
+            'slb_confirmation_page_id',
+            'slb_reward_page_id',
+            'slb_default_email_footer',
+            'slb_download_limit',
+        ),
+    );
+
+    // return option data
+    return $settings;
+}
+
 
 /* !7. CUSTOM POST TYPES */
 
@@ -2634,12 +2786,16 @@ function slb_options_admin_page() {
 // 9.1 
 // hint: registers all our plugin options
 function slb_register_options() {
-    // plugin options
-    register_setting( 'slb_plugin_options', 'slb_manage_subscription_page_id' );
-    register_setting( 'slb_plugin_options', 'slb_confirmation_page_id' );
-    register_setting( 'slb_plugin_options', 'slb_reward_page_id' );
-    register_setting( 'slb_plugin_options', 'slb_default_email_footer' );
-    register_setting( 'slb_plugin_options', 'slb_download_limit' ); 
+
+    // get plugin options settings
+    $options = slb_get_options_settings();
+
+    // loop over settings
+    foreach( $options['settings'] as $setting ) :
+
+        // register this setting
+        register_setting( $option['group'], $setting);
+    endforeach;
 }
 
 
