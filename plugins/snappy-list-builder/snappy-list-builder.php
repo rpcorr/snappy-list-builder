@@ -64,6 +64,7 @@ Text Domain: snappy-list-builder
         5.13 - slb_download_subscribers_csv() generates a .csv file of subscribers data expects $_GET['list_id'] to be set in the URL
         5.14 - slb_parse_import_csv() this function retrieves a csv file from the server and parse data into a php array; it then returns that array in a json formatted object
         5.15 - slb_import_subscribers() imports new subscribers from our import admin page; this function is a form handler and expects subscriber data in the $_POST scope
+        5.16 - slb_check_wp_version() checks the current version of WordPress and displays a message in the plugin page if the version is untested
         
     6. HELPERS
         6.1 - slb_subscriber_has_subscription( $subscriber_id, $list_id ) returns true or false
@@ -91,7 +92,8 @@ Text Domain: snappy-list-builder
         6.23 - slb_get_list_subscribers( $list_id = 0) returns an array of subscriber_id's
         6.24 - slb_get_list_subscriber_count( $list_id=0 ) returns the amount of subscribers in the list
         6.25 - slb_get_export_link( $list_id=0 ) returns a unique link for downloading a subscribers csv
-        6.26 - slb_csv_to_array( $filename, ',')
+        6.26 - slb_csv_to_array( $filename, ',') converts csv file into an array
+        6.27 - slb_get_admin_notice( $message, $class) returns html formatted for WP admin notices 
         
     7. CUSTOM POST TYPES
         7.1 - subscribers
@@ -171,6 +173,7 @@ add_action('admin_init', 'slb_register_options');
 // 1.10
 // hint: register activation/deactivation/uninstall functions
 register_activation_hook(__FILE__, 'slb_activate_plugin');
+add_action( 'admin_notices', 'slb_check_wp_version');
 
 // 1.11
 // hint: trigger reward downloads
@@ -1321,7 +1324,45 @@ function slb_import_subscribers() {
 
     // return result as json
     slb_return_json( $result );
-} 
+}
+
+// 5.16
+// hint: checks the current version of WordPress and displays a 
+// message in the plugin page if the version is untested
+function slb_check_wp_version() {
+    
+    global $pagenow;
+    
+    if ( $pagenow == 'plugins.php' && is_plugin_active('snappy-list-builder/snappy-list-builder.php') ):
+        
+        // get the wp version
+        $wp_version = get_bloginfo( 'version' );
+
+        // tested versions
+        // these are the versions we've tested our plugin
+        $tested_versions = array(
+            '4.2.0',
+            '4.2.1',
+            '4.2.2',
+            '4.2.3',
+            '4.2.4',
+            '6.0',
+        );
+
+        // if the current wp version is not in our tested versions...
+        if( !in_array( $wp_version, $tested_versions ) ):
+
+            // get notice html
+            $notice = slb_get_admin_notice('Snappy List Builder has not been tested in your version of WordPress.  It still may
+            work though...', 'error');
+
+            // echo the notice html
+            echo( $notice );
+            
+        endif;
+    
+    endif;
+}
 
 /* !6. HELPERS */
 
@@ -2287,7 +2328,7 @@ function slb_get_export_link( $list_id=0 ) {
 } 
 
 // 6.26
-// hint:
+// hint: converts csv file into an array
 function slb_csv_to_array( $filename='', $delimiter=',') {
 
     // this is an important setting!
@@ -2332,6 +2373,31 @@ function slb_csv_to_array( $filename='', $delimiter=',') {
 
     // return the new data as a php array
     return $return_data;
+} 
+
+// 6.27
+// hint: returns html formatted for WP admin notices
+function slb_get_admin_notice( $message, $class) {
+    
+    // setup our return variable
+    $output = '';
+
+    try {
+        
+        // create output html
+        $output = '
+            <div class="' . $class . '">
+                <p>' . $message . '</p>
+            </div>
+        ';
+        
+    } catch ( Exception $e ) {
+        
+        // php error
+    }
+
+    // return output
+    return $output;
 }
 
 
