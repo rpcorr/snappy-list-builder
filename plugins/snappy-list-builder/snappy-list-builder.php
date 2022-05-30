@@ -1374,8 +1374,15 @@ function slb_check_wp_version() {
             '6.0',
         );
 
+        $tested_range = array(4.0,6.0);
+
         // if the current wp version is not in our tested versions...
-        if( !in_array( $wp_version, $tested_versions ) ):
+        // remove: if( !in_array( $wp_version, $tested_versions ) ):
+        if( (float)$wp_version >= (float)$tested_range[0] && (float)$wp_version <= (float)$tested_range[1] ):
+
+            // we're good!
+        
+        else :
 
             // get notice html
             $notice = slb_get_admin_notice('Snappy List Builder has not been tested in your version of WordPress.  It still may
