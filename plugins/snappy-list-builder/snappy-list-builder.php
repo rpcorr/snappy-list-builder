@@ -218,7 +218,9 @@ function slb_form_shortcode( $args, $content="") {
             <form id="slb_register_form" name="slb_form" class="slb-form"
             action="/wp-admin/admin-ajax.php?action=slb_save_subscription" method="post"> 
 
-                <input type="hidden" name="slb_list" value="' . $list_id .'">';
+                <input type="hidden" name="slb_list" value="' . $list_id .'">
+                
+                '.  wp_nonce_field( 'slb-register-subscription_' . $list_id, '_wpnonce', true, false );
 
                 if( strlen( $title ) ) :
                     $output .= '<h3 class="slb-title">' . $title . '</h3>';
@@ -636,74 +638,80 @@ function slb_save_subscription() {
     try {
         
         // get list_id
-        $list_id = (int)$_POST['slb_list'];
+        //$list_id = (int)$_POST['slb_list'];
+        $list_id = (isset($_POST['slb_list'])) ? (int)$_POST['slb_list'] : 0;
+
+        // verify nonce
+        if( check_ajax_referer( 'slb-register-subscription_' . $list_id ) ) :
         
-        // prepare subscriber data
-        $subscriber_data = array(
-          'fname' => esc_attr( $_POST['slb_fname'] ),
-          'lname' => esc_attr( $_POST['slb_lname'] ),
-          'email' => esc_attr( $_POST['slb_email'] ),
-        );
+            // prepare subscriber data
+            $subscriber_data = array(
+            'fname' => esc_attr( $_POST['slb_fname'] ),
+            'lname' => esc_attr( $_POST['slb_lname'] ),
+            'email' => esc_attr( $_POST['slb_email'] ),
+            );
 
-        // setup our errors array
-        $errors = array(); 
+            // setup our errors array
+            $errors = array(); 
 
-        // form validation
-        if ( !strlen( $subscriber_data[ 'fname'] ) ) $errors['fname'] = 'First name is required.';
-        if ( !strlen( $subscriber_data[ 'lname'] ) ) $errors['lname'] = 'Last name is required.';
-        if ( !strlen( $subscriber_data[ 'email'] ) ) $errors['email'] = 'Email address is required.';
-        if ( !strlen( $subscriber_data[ 'email'] ) && !is_email( $subscriber_data[ 'email' ]) ) $errors['email'] = 'Email address must be valid.';
-        
-
-        // if there are errors
-        if ( count( $errors ) ) :
-
-            // append errors to result structure for later use
-            $result[ 'error' ] = 'Some fields are still required. ';
-            $result[ 'errors' ] = $errors;
+            // form validation
+            if ( !strlen( $subscriber_data[ 'fname'] ) ) $errors['fname'] = 'First name is required.';
+            if ( !strlen( $subscriber_data[ 'lname'] ) ) $errors['lname'] = 'Last name is required.';
+            if ( !strlen( $subscriber_data[ 'email'] ) ) $errors['email'] = 'Email address is required.';
+            if ( !strlen( $subscriber_data[ 'email'] ) && !is_email( $subscriber_data[ 'email' ]) ) $errors['email'] = 'Email address must be valid.';
             
-        else :
-            // if there are no errors, proceed...
-            
-            // attempt to create/save subscriber
-            $subscriber_id = slb_save_subscriber( $subscriber_data );
 
-            // if subscriber was saved successfully $subscriber_id will be greater than 0
-            if ( $subscriber_id ) :
+            // if there are errors
+            if ( count( $errors ) ) :
+
+                // append errors to result structure for later use
+                $result[ 'error' ] = 'Some fields are still required. ';
+                $result[ 'errors' ] = $errors;
                 
-                // if subscriber already has this subscription
-                if( slb_subscriber_has_subscription( $subscriber_id, $list_id ) ) :
+            else :
+                // if there are no errors, proceed...
+                
+                // attempt to create/save subscriber
+                $subscriber_id = slb_save_subscriber( $subscriber_data );
+
+                // if subscriber was saved successfully $subscriber_id will be greater than 0
+                if ( $subscriber_id ) :
                     
-                    // get the list object
-                    $list = get_post( $list_id );
+                    // if subscriber already has this subscription
+                    if( slb_subscriber_has_subscription( $subscriber_id, $list_id ) ) :
+                        
+                        // get the list object
+                        $list = get_post( $list_id );
 
-                    // return detailed error
-                    $result[ 'error' ] .= esc_attr( $subscriber_data['email'] . ' is already subscribed to ' . $list->post_title . '.');
-
-                else :
-
-                    // send new subscriber a confirmation email, returns true if we were successful
-                    $email_sent = slb_send_subscriber_email( $subscriber_id, 'new_subscription', $list_id );
-
-                    // if email was sent
-                    if ( !$email_sent ) :
-
-                        // email could not be sent
-                        $result[ 'error' ] = 'Unable to send email. ';
+                        // return detailed error
+                        $result[ 'error' ] .= esc_attr( $subscriber_data['email'] . ' is already subscribed to ' . $list->post_title . '.');
 
                     else :
 
-                        // email sent and subscription saved!
-                        $result[ 'status' ] = 1;
-                        $result[ 'message' ] = 'Success! A confirmation email has been sent to '. $subscriber_data[ $email ];
-                        
-                        // clean up: remove our empty error
-                        unset( $result[ $error ]);
+                        // send new subscriber a confirmation email, returns true if we were successful
+                        $email_sent = slb_send_subscriber_email( $subscriber_id, 'new_subscription', $list_id );
+
+                        // if email was sent
+                        if ( !$email_sent ) :
+
+                            // email could not be sent
+                            $result[ 'error' ] = 'Unable to send email. ';
+
+                        else :
+
+                            // email sent and subscription saved!
+                            $result[ 'status' ] = 1;
+                            $result[ 'message' ] = 'Success! A confirmation email has been sent to '. $subscriber_data[ $email ];
+                            
+                            // clean up: remove our empty error
+                            unset( $result[ $error ]);
+                            
+                        endif;
                         
                     endif;
                     
                 endif;
-                
+            
             endif;
         
         endif;
@@ -807,23 +815,27 @@ function slb_unsubscribe() {
 
     try {
 
-        // if there are lists to remove
-        if( is_array($list_ids) ) :
+        // validate nonce
+        if( check_ajax_referer( 'slb-update-subscriptions_' . $subscriber_id ) ):
+            // if there are lists to remove
+            if( is_array($list_ids) ) :
 
-            // loop over lists to remove
-            foreach( $list_ids as &$list_id ) :
+                // loop over lists to remove
+                foreach( $list_ids as &$list_id ) :
 
-                // remove this subscription
-                slb_remove_subscription( $subscriber_id, $list_id );
-            endforeach;
+                    // remove this subscription
+                    slb_remove_subscription( $subscriber_id, $list_id );
+                endforeach;
+            endif;
+
+            // setup success status and message
+            $result['status'] = 1;
+            $result['message'] = 'Subscriptions updated. ';
+
+            // get the updated list of subscriptions as html
+            $result['html'] = slb_get_manage_subscriptions_html( $subscriber_id );
+
         endif;
-
-        // setup success status and message
-        $result['status'] = 1;
-        $result['message'] = 'Subscriptions updated. ';
-
-        // get the updated list of subscriptions as html
-        $result['html'] = slb_get_manage_subscriptions_html( $subscriber_id );
         
     } catch ( Exception $e ) {
         //PHP error
@@ -1034,8 +1046,14 @@ function slb_trigger_reward_download() {
 
             slb_upate_reward_link_downloads( $uid );
 
-            header("Content-type: application/".$reward['file']['mime_type'], true, 200 );
-            header("Content-Disposition: attachment; filename=".$reward['title']);
+            // get the reward mimetype
+            $mimetype = $reward['file']['mime_type'];
+            // extract the filetype from the mimetype
+            $mimetype_array = explode('/', $mimetype);
+            $filetype = $mimetype_array[1];
+
+            header("Content-type: ". $mimetype, true, 200 );
+            header("Content-Disposition: attachment; filename=".$reward['title'] . '.' . $filetype);
             header("Pragma: no-cache");
             header("Expires: 0");
             readfile($reward['file']['url']);
@@ -1882,10 +1900,14 @@ function slb_get_manage_subscriptions_html( $subscriber_id) {
         // set the title
         $title = $subscriber_data['fname'] .'\'s Subscriptions';
 
+        $nonce = wp_nonce_field( 'slb-update-subscriptions_' . $subscriber_id, '_wpnonce', true, false);
+
         // build out output html
         $output = '
             <form id="slb_manage_subscriptions_form" class="slb-form" method="post"
             action="/wp-admin/admin-ajax.php?action=slb_unsubscribe">
+
+            ' . $nonce . '
             
             <input type="hidden" name="subscriber_id" value="' . $subscriber_id . '">
             
