@@ -73,3 +73,10 @@ This upgrade gets rid of `untested WordPress version` notice on the plugin page 
 
 This plugin is the result of what you'll learn in [The Ultimate WordPress Course](http://wordpressplugincourse.com/ "The Ultimate WordPress Plugin Course"):
 An online video course to teach you how to become a WordPress plugin developer today.  Head over to [www.wordpressplugincourse.com](http://wordpressplugincourse.com/ "The Ultimate WordPress Plugin Course") to learn more!
+
+== Other info ==
+
+This course also uses:
+
+ - WP Mail Logging plugin (https://wordpress.org/plugins/wp-mail-logging/) to record email testing while developing plugin.
+ - Advanced Custom Fields (https://en-ca.wordpress.org/plugins/advanced-custom-fields/) for creating fields bofore integrating to custom plugin.
